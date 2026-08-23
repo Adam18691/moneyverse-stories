@@ -1,32 +1,30 @@
-name: GOD R v28.2 FINAL PURE R - ZW - YouTube R
+name: GOD R v28.3 FINAL - Full Folder - ZW Q4
 on:
   schedule:
-    - cron: '0 19 * * *' # EG 21:00
-    - cron: '0 18 * * *' # ZW زيمبابوي 20:00 Harare - بدل SA
-    - cron: '0 17 * * *' # AE 21:00
-    - cron: '0 23 * * *' # US 19:00
+    - cron: '0 19 * * *' # EG مصر 21:00
+    - cron: '0 18 * * *' # ZW زيمبابوي Harare 20:00 - جديدة بدل SA
+    - cron: '0 17 * * *' # AE الامارات 21:00
+    - cron: '0 23 * * *' # US امريكا 19:00
   workflow_dispatch:
-
 jobs:
   god-r:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install R FINAL PURE R
+      - name: Install R FINAL PURE R Full Folder
         run: |
           sudo apt-get update
-          sudo apt-get install -y r-base libmagick++-dev libavfilter-dev libcurl4-openssl-dev
-          R -e "install.packages(c('magick','av','tuber','gargle','httr','jsonlite','glue','stringr','openssl'), repos='https://cloud.r-project.org')"
-      - name: Generate Video 4K PURE R
+          sudo apt-get install -y r-base libmagick++-dev libavfilter-dev libcurl4-openssl-dev ffmpeg
+          R -e "install.packages(c('magick','av','tuber','gargle','httr','jsonlite','glue','stringr'), repos='https://cloud.r-project.org')"
+      - name: Generate Video 4K - Full Folder v28.3 ZW
         run: |
           Rscript main.R
-          ls -lh output/
-          cat output/title.txt
-      - name: Upload YouTube PURE R - youtube_secure_upload.R
+          echo "=== FULL FOLDER STRUCTURE ==="
+          ls -R output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/
+          ls -lh output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps.mp4
+      - name: Upload YouTube PURE R - Full Folder
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
-        run: |
-          Rscript youtube_secure_upload.R
-          cat output/upload_result.json
+        run: Rscript youtube_secure_upload.R
