@@ -3,22 +3,25 @@ name: Tayyibat GOD R Auto - Final
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 5 * * *'  # كل يوم 8 الصبح بتوقيت القاهرة
+    - cron: '0 5 * * *'
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib2
+          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip install moviepy pydub Pillow || true
           pip install -r requirements.txt || true
 
       - name: Generate and Upload
@@ -27,8 +30,8 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
         run: |
-          echo "==================== مشروع TAYYIBAT MEGA V14 FINAL - GOD R - 60 ===================="
-          python main.py --god-r
+          python main.py --god-r || python main.py
+          ls -lh output/
           python youtube_secure_upload.py
 
       - uses: actions/upload-artifact@v4
