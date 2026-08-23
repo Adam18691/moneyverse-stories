@@ -1,9 +1,11 @@
-name: Tayyibat GOD R Auto - Final
+name: Tayyibat GOD R - 3 فيديو ذروة
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 5 * * *'
+    - cron: '0 16 * * *'  # 7 مساءً القاهرة
+    - cron: '0 18 * * *'  # 9 مساءً القاهرة  
+    - cron: '0 20 * * *'  # 11 مساءً القاهرة
 
 jobs:
   generate:
@@ -24,15 +26,21 @@ jobs:
           pip install moviepy pydub Pillow || true
           pip install -r requirements.txt || true
 
-      - name: Generate and Upload
+      - name: Generate 3 Videos Peak Time
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
         run: |
-          python main.py --god-r || python main.py
-          ls -lh output/
-          python youtube_secure_upload.py
+          echo "🔥 وقت الذروة - هنولد 3 فيديوهات"
+          for i in 1 2 3
+          do
+            echo "=== فيديو $i من 3 ==="
+            python main.py --god-r || python main.py
+            python youtube_secure_upload.py
+            rm -rf output/*.mp4
+            sleep 10
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
