@@ -1,18 +1,16 @@
-import os
-import glob
+import os, glob, hashlib, base64
 from cryptography.fernet import Fernet
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# فك التشفير العالي AES
-key = os.environ['YT_KEY'].encode()
-enc_token = os.environ['YT_TOKEN_ENC'].encode()
+# تحويل أي كلمة سر لمفتاح تشفير عالي صحيح
+raw_key = os.environ['YT_KEY'].encode()
+fernet_key = base64.urlsafe_b64encode(hashlib.sha256(raw_key).digest())
+f = Fernet(fernet_key)
 
-f = Fernet(key)
-refresh_token = f.decrypt(enc_token).decode()
+refresh_token = f.decrypt(os.environ['YT_TOKEN_ENC'].encode()).decode()
 
-# تسجيل دخول يوتيوب بتشفير TLS 1.3
 creds = Credentials(
     None,
     refresh_token=refresh_token,
@@ -22,21 +20,15 @@ creds = Credentials(
 )
 
 youtube = build('youtube', 'v3', credentials=creds)
-print("تم فك التشفير والدخول ليوتيوب بنجاح - التشفير عالي!")
+print("تم فك التشفير العالي بنجاح!")
 
-# رفع الفيديو
 videos = glob.glob("output/*.mp4")
 if videos:
     file_path = videos[0]
-    request = youtube.videos().insert(
+    req = youtube.videos().insert(
         part="snippet,status",
-        body={
-            "snippet": {"title": "Tayyibat - تلاوة طيبة", "description": "#قران #Tayyibat", "categoryId": "22"},
-            "status": {"privacyStatus": "public"}
-        },
+        body={"snippet":{"title":"Tayyibat - تلاوة","description":"#قران","categoryId":"22"},"status":{"privacyStatus":"public"}},
         media_body=MediaFileUpload(file_path)
     )
-    response = request.execute()
-    print(f"تم الرفع: https://youtu.be/{response['id']}")
-else:
-    print("مفيش فيديو في output/")
+    res = req.execute()
+    print(f"اترفع: https://youtu.be/{res['id']}")
