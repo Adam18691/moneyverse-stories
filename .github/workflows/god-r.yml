@@ -1,42 +1,31 @@
-name: Tayyibat GOD R - فيديو ذروة مضمون 3
+name: GOD R v28.2 FINAL PURE R - ZW بدل SA - Q4
 on:
   schedule:
-    - cron: '0 17,19,21 * * *' # 7 و 9 و 11 م بتوقيت القاهرة
+    - cron: '0 19 * * *' # EG مصر 21:00
+    - cron: '0 18 * * *' # ZW زيمبابوي 20:00 Harare - جديدة بدل SA
+    - cron: '0 17 * * *' # AE الامارات 21:00
+    - cron: '0 23 * * *' # US امريكا 19:00
   workflow_dispatch:
 
 jobs:
-  generate:
+  god-r-final:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          
-      - name: Install deps
+      - name: Install R FINAL
         run: |
-          pip install gTTS pillow pydub google-api-python-client google-auth-httplib2 google-auth-oauthlib
-          sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
-          
-      - name: Generate Video
+          sudo apt-get update
+          sudo apt-get install -y r-base libmagick++-dev libavfilter-dev
+          R -e "install.packages(c('magick','av','stringr','glue','jsonlite'), repos='https://cloud.r-project.org')"
+      - name: Run v28.2 FINAL PURE R
         run: |
-          python main.py
+          Rscript main.R
           ls -lh output/
-          
-      - name: Upload to YouTube
+          cat output/global_schedule_Q4.json
+          cat output/title.txt
+      - name: Upload 4K ZW
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
-        run: |
-          python youtube_secure_upload.py
-          
-      - name: Upload artifact (optional)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: video-output
-          path: output/
-          if-no-files-found: warn
+        run: python youtube_secure_upload.py
