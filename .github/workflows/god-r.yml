@@ -1,35 +1,38 @@
-name: Tayyibat GOD R Auto - Encrypted
+name: Tayyibat GOD R Auto - Final
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * *'  # كل يوم 8 الصبح بتوقيت القاهرة
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    env:
-      YT_KEY: ${{ secrets.YT_KEY }}
-      YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
-      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install with High Encryption
+      - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
-          pip install cryptography google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          pip install --upgrade pip
+          pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib2
+          pip install -r requirements.txt || true
 
-      - name: Generate and Upload Encrypted
+      - name: Generate and Upload
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
         run: |
+          echo "==================== مشروع TAYYIBAT MEGA V14 FINAL - GOD R - 60 ===================="
           python main.py --god-r
           python youtube_secure_upload.py
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: tayyibat-output
           path: output/
