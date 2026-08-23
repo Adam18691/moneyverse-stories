@@ -1,15 +1,10 @@
-import os, glob, hashlib, base64
-from cryptography.fernet import Fernet
+import os, glob
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# تحويل أي كلمة سر لمفتاح تشفير عالي صحيح
-raw_key = os.environ['YT_KEY'].encode()
-fernet_key = base64.urlsafe_b64encode(hashlib.sha256(raw_key).digest())
-f = Fernet(fernet_key)
-
-refresh_token = f.decrypt(os.environ['YT_TOKEN_ENC'].encode()).decode()
+# مؤقتا بدون Fernet لحد ما نحدث الـ secret
+refresh_token = os.environ['YT_TOKEN_ENC'] # حط فيه التوكن الخام مؤقتا
 
 creds = Credentials(
     None,
@@ -18,9 +13,8 @@ creds = Credentials(
     client_secret=os.environ['YT_CLIENT_SECRET'],
     token_uri='https://oauth2.googleapis.com/token'
 )
-
 youtube = build('youtube', 'v3', credentials=creds)
-print("تم فك التشفير العالي بنجاح!")
+print("دخول مباشر - هنرجع التشفير بعد ما يشتغل")
 
 videos = glob.glob("output/*.mp4")
 if videos:
