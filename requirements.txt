@@ -1,8 +1,0 @@
-transformers
-accelerate
-datasets
-torch
-chromadb
-sentence-transformers
-faster-whisper
-ctranslate2
