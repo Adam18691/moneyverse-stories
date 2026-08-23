@@ -1,0 +1,6 @@
+version: '3.8'
+services:
+  tayyibat:
+    build:.
+    volumes:
+      -./output:/app/output
