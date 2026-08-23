@@ -1,18 +1,34 @@
-name: Tayyibat GOD R Auto
+name: Tayyibat GOD R Auto - Encrypted
+
 on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
+
 jobs:
   generate:
     runs-on: ubuntu-latest
+    env:
+      YT_KEY: ${{ secrets.YT_KEY }}
+      YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
+      YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python main.py --god-r
+
+      - name: Install with High Encryption
+        run: |
+          pip install -r requirements.txt
+          pip install cryptography google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
+      - name: Generate and Upload Encrypted
+        run: |
+          python main.py --god-r
+          python youtube_secure_upload.py
+
       - uses: actions/upload-artifact@v4
         with:
           name: tayyibat-output
