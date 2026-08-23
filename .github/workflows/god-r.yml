@@ -1,126 +1,42 @@
-import os, subprocess, random, json
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from datetime import datetime
-os.makedirs("output", exist_ok=True)
+name: Tayyibat GOD R - فيديو ذروة مضمون 3
+on:
+  schedule:
+    - cron: '0 17,19,21 * * *' # 7 و 9 و 11 م بتوقيت القاهرة
+  workflow_dispatch:
 
-# === الحيلة السليمانية 1: عناوين CTR 15%+ - تركيبة نفسية ===
-# صيغة: [رقم صادم] + [خوف] + [وعد بالحل] + (قوس سري)
-TITLES_CTR = [
-    {
-        "title": "هذا العيش يدمر كليتك في 30 يوم (امنعه فورا)",
-        "hook": "90% من المصريين يأكلونه يوميا",
-        "script": "القمح الحديث معدل وراثيا، فيه جلوتين قوي يفتح مسام امعاءك. الامعاء المفتوحة تدخل سموم الدم، الكلى تتعب، المناعة تهاجم جسمك. جرب تمنع عيش ومكرونة ثلاثين يوم فقط، وشوف الفرق في بطنك ونومك وطاقتك. بديله رز، بطاطا، ذرة.",
-        "keywords": "الجلوتين, ارتشاح الامعاء, القمح, العيش, دكتور ضياء العوضي"
-    },
-    {
-        "title": "اللبن البقري يسبب السرطان؟ الحقيقة الصادمة",
-        "hook": "الدكتور منع اللبن لهذا السبب",
-        "script": "الكازين بروتين اللبن البقري لا يهضم، يتحول لمورفين طبيعي يدمنك ويعمل التهاب. كل مشاكل الجيوب الانفية والقولون والجلد سببها لبن بقري. امنعه ثلاثين يوم، استبدله بلبن جوز هند او لبن جاموسي، وسترى مخاطك يختفي ونومك يتحسن.",
-        "keywords": "حساسية اللبن, الكازين, اللبن البقري, التهاب, مخاط"
-    },
-    {
-        "title": "معلقة سكر توقف مناعتك 6 ساعات (تجربة حية)",
-        "hook": "لهذا تمرض كل اسبوع",
-        "script": "السكر الابيض يوقف خلايا المناعة. معلقة واحدة فقط توقف المناعة ست ساعات. انت تشرب بيبسي وعصير وشاي بسكر، مناعتك واقفة طول اليوم. السكر يغذي الفطريات والسرطان ويعمل مقاومة انسولين. امنع سكر ثلاثين يوم وكل فاكهة كاملة فقط.",
-        "keywords": "السكر, المناعة, مقاومة الانسولين, الفطريات, دكتور ضياء"
-    },
-]
-
-data = random.choice(TITLES_CTR)
-seo_title = data["title"] + " | الطب الملعون" # 60-70 حرف = اعلى CTR
-hook = data["hook"]
-script = data["script"]
-keywords = data["keywords"]
-
-# === الحيلة السليمانية 2: وصف SEO يخترق خوارزمية يوتيوب ===
-# اول سطرين = اهم حاجة - يوتيوب بيقرأهم فقط
-seo_description = f"""{seo_title}
-
-{hook} - {script[:120]}...
-
-⏱️ الفهرس السليماني (يزيد وقت المشاهدة):
-00:00 المقدمة الصادمة
-00:42 السبب الحقيقي
-02:15 التجربة العملية
-05:30 الحل السليماني
-08:45 الخلاصة والتحذير
-
-📌 في هذا الفيديو نكشف بالتفصيل:
-✅ {script}
-✅ بدائل طبيعية مجربة
-✅ تجربة 30 يوم بدون {keywords.split(',')[0]}
-
-🔔 اشترك واكتب: {keywords.split(',')[0]} خطر
-
-#الطب_الملعون #دكتور_ضياء_العوضي #CursedMedicine
-#الجلوتين #اللبن #السكر #ارتشاح_الامعاء #التهاب_مزمن #ترند_مصر #صحة #معلومة_طبية
-#glutenfree #dairyfree #health #trending
-
-الكلمات المفتاحية: {keywords}, الطب الملعون, Cursed Medicine Egypt, Dr Diaa El Awady
-#SEO #CTR #Viral
-
-نشر: {datetime.now().strftime('%Y-%m-%d %H:%M')} بتوقيت القاهرة - ذروة المشاهدة
-"""
-
-open("output/title.txt","w",encoding="utf-8").write(seo_title)
-open("output/desc.txt","w",encoding="utf-8").write(seo_description)
-open("output/tags.txt","w",encoding="utf-8").write(keywords + ",الطب الملعون,دكتور ضياء العوضي,ترند مصر,Cursed Medicine,الجلوتين,اللبن,السكر")
-
-# === الحيلة السليمانية 3: صوت واقعي 100% - تنفس + وقفات ===
-voice_long = "output/voice_long.mp3"
-try:
-    from gtts import gTTS
-    tts = gTTS(text=script*3, lang='ar', slow=False) # تكرار ليطول
-    tts.save("output/v.mp3")
-    subprocess.run(["ffmpeg","-y","-i","output/v.mp3","-filter:a","atempo=0.88,apulsator=hz=0.2:amount=0.5,aresample=48000","-t","610",voice_long])
-except:
-    subprocess.run(["ffmpeg","-y","-f","lavfi","-i","sine=f=90:d=610","-c:a","aac",voice_long])
-
-# === الحيلة السليمانية 4: صورة مصغرة CTR 15% - احمر + اصفر + وجه ===
-W,H = 1280,720
-img = Image.new('RGB', (W,H), (0,0,0))
-draw = ImageDraw.Draw(img, 'RGBA')
-
-# خلفية حمراء نارية متدرجة
-for y in range(H):
-    r = 200 + int(y*0.15)
-    draw.line([(0,y),(W,y)], fill=(r,10,10))
-
-# بوكس اصفر كبير - اعلى CTR في العالم
-draw.rectangle([15,15,W-15, H//2+80], fill=(255,230,0), outline=(0,0,0), width=10)
-
-try:
-    f_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 88)
-    f_mid = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
-    f_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
-except:
-    f_big = f_mid = f_small = ImageFont.load_default()
-
-# ظل 3D احترافي
-def txt(x,y,text,font,color):
-    for dx,dy in [(6,6),(5,5)]: draw.text((x+dx,y+dy), text, font=font, fill=(0,0,0,230), anchor="mm")
-    draw.text((x,y), text, font=font, fill=color, anchor="mm", stroke_width=6, stroke_fill=(0,0,0))
-
-# عنوان CTR - كلمتين فقط
-parts = seo_title.split('(')[0].split(' ')[:4]
-short_title = ' '.join(parts)
-txt(W//2, 160, short_title, f_big, (180,0,0))
-txt(W//2, 320, hook, f_mid, (0,0,0))
-
-# عنصر بشري - دائرة بيضاء + علامة خطر
-draw.ellipse([W-280, H-220, W-80, H-20], fill=(255,255,255), outline=(0,0,0), width=6)
-draw.text((W-180, H-120), "⚠️", font=f_big, fill=(200,0,0), anchor="mm")
-draw.text((W//2, 620), "شاهد قبل الحذف | د. ضياء العوضي", font=f_small, fill=(255,255,255), anchor="mm")
-
-thumb = "output/thumbnail_pro_max.jpg"
-img = img.filter(ImageFilter.SHARPEN)
-img.save(thumb, quality=98)
-
-# فيديو نهائي
-final = "output/tayyibat_10min_8K_60fps_STUDIO_FINAL.mp4"
-subprocess.run([
-    "ffmpeg","-y","-loop","1","-i",thumb,"-i",voice_long,
-    "-filter_complex","[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z='if(lte(zoom,1),1,min(zoom+0.0015,1.4))':d=1:s=1920x1080:r=30,noise=alls=5[vid]",
-    "-map","[vid]","-map","1:a","-c:v","libx264","-pix_fmt","yuv420p","-crf","18","-t","605","-c:a","aac","-b:a","192k","-movflags","+faststart",final
-])
-print(f"✅ SEO ULTIMATE CTR: {seo_title}")
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install deps
+        run: |
+          pip install gTTS pillow pydub google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+          
+      - name: Generate Video
+        run: |
+          python main.py
+          ls -lh output/
+          
+      - name: Upload to YouTube
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
+        run: |
+          python youtube_secure_upload.py
+          
+      - name: Upload artifact (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-output
+          path: output/
+          if-no-files-found: warn
