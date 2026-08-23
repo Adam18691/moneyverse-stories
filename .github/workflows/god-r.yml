@@ -1,11 +1,11 @@
-name: Tayyibat GOD R - 3 فيديو ذروة مضمون
+name: Tayyibat - 3 فيديو ذروة مصر
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 16 * * *'  # 7م مصر
-    - cron: '0 18 * * *'  # 9م مصر
-    - cron: '0 20 * * *'  # 11م مصر
+    - cron: '0 16 * * *' # 7 مساء مصر
+    - cron: '0 18 * * *' # 9 مساء مصر
+    - cron: '0 20 * * *' # 11 مساء مصر
 
 jobs:
   generate:
@@ -16,36 +16,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg + Deps
+      - name: Install FFmpeg
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install --upgrade pip
           pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
-          pip install moviepy pydub Pillow gTTS || true
 
-      - name: Generate 3 Videos - Guaranteed
+      - name: Generate and Upload
         env:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
         run: |
-          mkdir -p output
-          for i in 1 2 3; do
-            echo "=== فيديو $i / 3 ==="
-            python main.py --god-r || echo "main.py فشل، هولد فيديو احتياطي"
-            
-            # لو مفيش فيديو، ولد واحد احتياطي يضمن الرفع
-            if [ -z "$(ls -A output/*.mp4 2>/dev/null)" ]; then
-              ffmpeg -y -f lavfi -i color=c=0x0a1a2a:s=1920x1080:d=600 -f lavfi -i anullsrc=r=48000:cl=stereo -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac output/backup_$i.mp4
-            fi
-            
-            ls -lh output/
-            python youtube_secure_upload.py || true
-            rm -rf output/*.mp4
-          done
+          python main.py
+          python youtube_secure_upload.py
+          ls -lh output/
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: tayyibat-output
           path: output/
+          if-no-files-found: warn
