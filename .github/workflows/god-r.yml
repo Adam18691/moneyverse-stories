@@ -1,4 +1,4 @@
-name: GOD R v28.3 FINAL - Full Folder - ZW Q4
+name: GOD R v28.3 FINAL - Fixed
 on:
   schedule:
     - cron: '0 19 * * *'
@@ -11,28 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install R + Deps FINAL
+      - name: Install R - FIXED NO libuv
         run: |
           sudo apt-get update
-          sudo apt-get install -y r-base libmagick++-dev libavfilter-dev libcurl4-openssl-dev ffmpeg libpoppler-cpp-dev
-          # حل مشكلة not writable
+          sudo apt-get install -y r-base libmagick++-dev ffmpeg
           sudo mkdir -p /usr/local/lib/R/site-library
           sudo chmod -R 777 /usr/local/lib/R/site-library
-          sudo R -e "install.packages(c('magick','av','tuber','gargle','httr','jsonlite','glue','stringr','openssl'), repos='https://cloud.r-project.org', lib='/usr/local/lib/R/site-library')"
-
+          sudo R -e "install.packages(c('magick','av','jsonlite','glue','stringr'), repos='https://cloud.r-project.org', lib='/usr/local/lib/R/site-library')"
       - name: Generate Video 4K - Full Folder v28.3 ZW
         run: |
           Rscript main.R
-          echo "=== FULL FOLDER ==="
-          ls -R output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/ || ls -R output/
-          ls -lh output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps.mp4 || echo "video in output/"
-
-      - name: Upload YouTube PURE R - Full Folder
-        env:
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_TOKEN_ENC: ${{ secrets.YT_TOKEN_ENC }}
-        run: |
-          Rscript youtube_secure_upload.R
-          cat output/upload_result.json || cat output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/meta/upload_result.json || echo "upload done"
+          ls -R output/tayyibat_v28.3_FINAL_PURE_R_4K_ZW_Q4_60fps/
+      - name: Upload YouTube PURE R - Full Folder FIXED
+        run: Rscript youtube_secure_upload.R
