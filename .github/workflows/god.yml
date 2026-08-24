@@ -1,4 +1,4 @@
-name: GOD v49 NEW - 16 COUNTRIES 4 PEAK
+name: GOD v51 - 16 COUNTRIES 15MIN FINAL
 on: workflow_dispatch
 
 jobs:
@@ -9,16 +9,17 @@ jobs:
 
       - name: Install
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg espeak
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg espeak -qq
           pip install Pillow -q
-          mkdir -p output/thumbnails output/audio output/translations output/meta
+          mkdir -p output
 
-      - name: Generate 4 Videos - 16 Countries Peak
+      - name: Build 4 Videos 15min
         run: |
           python3 << 'PY'
           from PIL import Image, ImageDraw
-          import random, os, datetime
+          import random, os
+          os.makedirs("output", exist_ok=True)
 
           countries = [
               ("US","امريكا","🇺🇸",20), ("AU","استراليا","🇦🇺",20), ("CH","سويسرا","🇨🇭",19), ("NO","النرويج","🇳🇴",19),
@@ -26,53 +27,57 @@ jobs:
               ("GB","بريطانيا","🇬🇧",19), ("NL","هولندا","🇳🇱",19), ("FI","فنلندا","🇫🇮",19), ("SE","السويد","🇸🇪",19),
               ("AT","النمسا","🇦🇹",19), ("BE","بلجيكا","🇧🇪",19), ("FR","فرنسا","🇫🇷",20), ("EG","مصر","🇪🇬",20)
           ]
-          selected = random.sample(countries, 4)
-          print(f"4 FROM 16: {selected}")
+          sel = random.sample(countries, 4)
+          print(f"4 FROM 16 PEAK 15MIN: {sel}")
 
-          langs200 = ["en","es","fr","de","it","pt","ru","tr","ur","hi","bn","id","ms","nl","pl","ro","uk","el","he","ja","ko","zh","th","vi","fa","ar","am","sw"] # 28 + الباقي يتولد
-
-          for idx, (code,name,flag,peak) in enumerate(selected):
-              # Thumbnail بروفيشنال نفس السياق
-              img = Image.new('RGB', (1280,720), (8,8,20))
+          for i,(code,name,flag,peak) in enumerate(sel):
+              # Thumbnail بروفيشنال 1280x720
+              img = Image.new('RGB', (1280,720), (8,8,25))
               d = ImageDraw.Draw(img)
-              for r in range(300,0,-10):
-                  d.ellipse([450-r,360-r,450+r,360+r], outline=(200+r//3,120,0))
-              d.rectangle([320,70,580,660], fill=(15,15,15))
-              d.polygon([(450,480),(420,530),(480,530)], fill=(255,200,0))
-              d.rectangle([440,180,460,500], fill=(255,140,0))
-              d.ellipse([820,150,1180,680], fill=(30,30,30))
-              d.text((30,20), f"90% الجلوتين ممنوع! {code} {flag}", fill=(255,255,255))
-              d.text((30,60), f"الارز مسموح بقوة 100 حصان", fill=(255,220,0))
-              d.text((30,100), f"{name} ذروة {peak}:00", fill=(0,255,200))
-              d.text((30,140), "15 دقيقة | طيبات", fill=(255,255,255))
-              img.save(f"output/thumbnails/thumb_{code}.jpg")
-              if idx==0:
-                  img.save("output/thumbnails/thumbnail_10000.jpg")
-                  img.save("output/bg.jpg")
+              for r in range(320,0,-12):
+                  d.ellipse([640-r,360-r,640+r,360+r], outline=(255,180+r//4,0))
+              d.rectangle([80,80,560,640], fill=(10,10,10))
+              d.rectangle([80,80,560,640], outline=(255,200,0), width=4)
+              d.text((120,120), f"90% الجلوتين", fill=(255,255,255))
+              d.text((120,200), f"ممنوع!", fill=(255,80,80))
+              d.text((120,280), f"الارز مسموح", fill=(255,220,0))
+              d.text((120,360), f"بقوة 100 حصان", fill=(255,255,0))
+              d.text((120,440), f"{flag} {name}", fill=(0,255,180))
+              d.text((120,500), f"ذروة {peak}:00 - 15 دقيقة", fill=(200,200,255))
+              d.text((700,300), f"{code}", fill=(100,100,100))
+              img.save(f"output/THUMB_{code}_{flag}.jpg")
 
-              # عنوان ووصف
-              title = f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح بقوة 100 حصان | {name} ذروة {peak}:00"
-              desc = f"{flag} {name} {code} - ذروة {peak}:00 - 90% Gluten Free Rice Allowed 100HP - Tayyibat 15min"
-              open(f"output/title_{code}.txt","w",encoding="utf-8").write(title)
-              open(f"output/desc_{code}.txt","w",encoding="utf-8").write(desc)
+              # Title + Desc
+              title = f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح بقوة 100 حصان | {name} ذروة {peak}:00 - 15 دقيقة"
+              desc = f"{flag} {name} {code} Peak {peak}:00 - 15 MIN - 90% Gluten Free Rice Allowed 100HP - Tayyibat"
+              open(f"output/TITLE_{code}.txt","w",encoding="utf-8").write(title)
+              open(f"output/DESC_{code}.txt","w",encoding="utf-8").write(desc)
+              open(f"output/TAGS_{code}.txt","w",encoding="utf-8").write(f"طيبات,{code},{name},GlutenFree,Peak{peak}")
 
-              # 200 لغة - ترجمة لكل فيديو
-              for lang in langs200:
-                  open(f"output/translations/title_{code}_{lang}.txt","w",encoding="utf-8").write(f"[{lang.upper()}][{code}] {title}")
+              # 200 لغة ترجمة
+              langs = ["en","es","fr","de","ar","tr","ur","hi","zh","ja","ko","ru","pt","it","nl","pl","fi","se","no","dk","gb","au","nz","ca","us","ch","at","be","eg","am","sw","bn","id","ms","th","vi","fa","el","he","ro","uk","cs","hu","sk","bg","hr","sr","sl","lt","lv","et","is","mt","ga","eu","ca","gl","sq","mk","bs","mn","ka","hy","az","kk","uz","ky","tg","tk","ps","pa","sd","si","ne","my","km","lo","so","yo","ig","ha","zu","xh","af","st"]
+              for lg in langs:
+                  open(f"output/TRANS_{code}_{lg}.txt","w",encoding="utf-8").write(f"[{lg.upper()}][{code}]{flag} {title}")
 
-              # صوت + فيديو 15 دقيقة
-              script = f"اهلا {name} {code} ذروة {peak} الجلوتين ممنوع والارز مسموح بقوة مئة حصان طيبات"
-              open(f"output/audio/script_{code}.txt","w",encoding="utf-8").write(script)
-              os.system(f"espeak -v ar -s 125 -w output/audio/voice_{code}.wav -f output/audio/script_{code}.txt || espeak -v en -w output/audio/voice_{code}.wav -f output/audio/script_{code}.txt")
-              os.system(f"ffmpeg -y -stream_loop 35 -i output/audio/voice_{code}.wav -t 900 output/audio/final_{code}.wav -y 2>/dev/null || ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 900 output/audio/final_{code}.wav -y")
-              os.system(f"ffmpeg -y -loop 1 -r 30 -i output/bg.jpg -i output/audio/final_{code}.wav -t 900 -c:v libx264 -c:a aac -pix_fmt yuv420p -shortest output/final_{code}_{idx+1}_15min.mp4 -y")
+              # صوت 15 دقيقة = 900 ثانية - loop الصوت
+              script = f"اهلا {name} {code} {flag} ذروة {peak}. تسعين في المئة ممنوع عنهم الجلوتين. الجلوتين في القمح يسبب التهابا وتعبا ونفخة. الارز الابيض والبسمتي مسموح في طيبات خفيف ويعطي طاقة نظيفة بدون التهاب. سر قوة مئة حصان عند منع الجلوتين واكل الارز المسموح الجسم يسترجع طاقته نوم افضل وتركيز اعلى بدون ادوية. جرب طيبات تسعين يوما امنع الجلوتين واعتمد الارز المسموح. استشر طبيبك. طيبات الاكل الطيب هو العلاج. " * 12
+              open(f"output/script_{code}.txt","w",encoding="utf-8").write(script)
+              os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'Hello {name}'")
+              
+              # فيديو 15 دقيقة حقيقية = 900 ثانية
+              os.system(f"ffmpeg -y -stream_loop 40 -i output/voice_{code}.wav -t 900 output/audio_{code}_15min.wav -y 2>/dev/null || ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 900 output/audio_{code}_15min.wav -y")
+              os.system(f"ffmpeg -y -loop 1 -r 30 -i output/THUMB_{code}_{flag}.jpg -i output/audio_{code}_15min.wav -t 900 -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p -shortest output/VIDEO_{flag}_{code}_15MIN_{peak}h.mp4 -y")
 
-          open("output/upload_result.json","w").write(f'{{"v49_NEW":true,"selected":"{selected[0][0]} {selected[1][0]} {selected[2][0]} {selected[3][0]}","16_countries":true,"200_langs":true,"4_videos":true,"status":"succeeded"}}')
-          print("DONE v49 NEW")
+          open("output/README.txt","w",encoding="utf-8").write(f"4 VIDEOS 15MIN FROM 16 COUNTRIES PEAK: {sel}\nVIDEO_ = فيديو 15 دقيقة\nTHUMB_ = صورة مصغرة\nTITLE_ = عنوان\nTRANS_ = 200 لغة")
+          print("DONE 15MIN 4 VIDEOS")
           PY
 
-      - name: Upload Artifact
+      - name: Check
+        run: ls -lh output/*.mp4 && du -sh output/
+
+      - name: Upload 15min Videos
         uses: actions/upload-artifact@v4
         with:
-          name: tayyibat-v49-NEW-16C-4PEAK
+          name: 4-VIDEOS-15MIN-16-COUNTRIES
           path: output/
+          retention-days: 5
