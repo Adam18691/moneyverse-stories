@@ -1,10 +1,5 @@
-name: GOD v53 FINAL 15MIN YOUTUBE 16 COUNTRIES
+name: GOD FINAL
 on:
-  schedule:
-    - cron: '0 17 * * *'
-    - cron: '0 18 * * *'
-    - cron: '0 0 * * *'
-    - cron: '0 10 * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,15 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install
         run: |
-          sudo apt-get update -y
           sudo apt-get install -y ffmpeg espeak -qq
           pip install Pillow google-api-python-client google-auth -q
           mkdir -p output
-
-      - name: Build 15min + Upload YouTube
+      - name: Run
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -28,104 +20,45 @@ jobs:
         run: |
           python3 << 'PY'
           from PIL import Image, ImageDraw
-          import random, os, sys
+          import random, os
           from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
-
-          countries = [
-              ("US","امريكا","🇺🇸",20), ("AU","استراليا","🇦🇺",20), ("CH","سويسرا","🇨🇭",19), ("NO","النرويج","🇳🇴",19),
-              ("NZ","نيوزيلندا","🇳🇿",20), ("CA","كندا","🇨🇦",20), ("DE","المانيا","🇩🇪",19), ("DK","الدنمارك","🇩🇰",19),
-              ("GB","بريطانيا","🇬🇧",19), ("NL","هولندا","🇳🇱",19), ("FI","فنلندا","🇫🇮",19), ("SE","السويد","🇸🇪",19),
-              ("AT","النمسا","🇦🇹",19), ("BE","بلجيكا","🇧🇪",19), ("FR","فرنسا","🇫🇷",20), ("EG","مصر","🇪🇬",20)
-          ]
+          countries = [("US","امريكا","🇺🇸",20),("AU","استراليا","🇦🇺",20),("CH","سويسرا","🇨🇭",19),("NO","النرويج","🇳🇴",19),("NZ","نيوزيلندا","🇳🇿",20),("CA","كندا","🇨🇦",20),("DE","المانيا","🇩🇪",19),("DK","الدنمارك","🇩🇰",19),("GB","بريطانيا","🇬🇧",19),("NL","هولندا","🇳🇱",19),("FI","فنلندا","🇫🇮",19),("SE","السويد","🇸🇪",19),("AT","النمسا","🇦🇹",19),("BE","بلجيكا","🇧🇪",19),("FR","فرنسا","🇫🇷",20),("EG","مصر","🇪🇬",20)]
           sel = random.sample(countries, 4)
-          print(f"=== 4 FROM 16 PEAK 15MIN YOUTUBE: {sel} ===")
-
-          yt = None
-          cid = os.getenv("YOUTUBE_CLIENT_ID")
-          csec = os.getenv("YOUTUBE_CLIENT_SECRET")
-          rtok = os.getenv("YOUTUBE_REFRESH_TOKEN")
-          if cid and csec and rtok:
-              try:
-                  creds = Credentials(None, refresh_token=rtok, token_uri="https://oauth2.googleapis.com/token", client_id=cid, client_secret=csec, scopes=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube"])
-                  creds.refresh(__import__("google.auth.transport.requests").auth.transport.requests.Request())
-                  yt = build("youtube","v3",credentials=creds)
-                  print("✅ YouTube API Ready - Token Refreshed")
-              except Exception as e:
-                  print(f"❌ YouTube Auth Failed: {e}")
-          else:
-              print("⚠️ Secrets missing - will build only")
-
+          print(f"4 FROM 16: {sel}")
+          yt=None
+          try:
+            creds=Credentials(None,refresh_token=os.getenv("YOUTUBE_REFRESH_TOKEN"),token_uri="https://oauth2.googleapis.com/token",client_id=os.getenv("YOUTUBE_CLIENT_ID"),client_secret=os.getenv("YOUTUBE_CLIENT_SECRET"),scopes=["https://www.googleapis.com/auth/youtube.upload"])
+            creds.refresh(__import__("google.auth.transport.requests").auth.transport.requests.Request())
+            yt=build("youtube","v3",credentials=creds)
+            print("YouTube Ready")
+          except Exception as e:
+            print(f"YouTube fail: {e}")
           for code,name,flag,peak in sel:
-              # Thumbnail
-              img = Image.new('RGB', (1280,720), (8,8,25))
-              d = ImageDraw.Draw(img)
-              for r in range(320,0,-12):
-                  d.ellipse([640-r,360-r,640+r,360+r], outline=(255,180,0))
-              d.rectangle([80,80,560,640], fill=(10,10,10))
-              d.rectangle([80,80,560,640], outline=(255,200,0), width=3)
-              d.text((120,130), f"90% الجلوتين ممنوع!", fill=(255,255,255))
-              d.text((120,210), f"الارز مسموح", fill=(255,220,0))
-              d.text((120,290), f"بقوة 100 حصان", fill=(255,255,0))
-              d.text((120,370), f"{flag} {name} {code}", fill=(0,255,180))
-              d.text((120,450), f"ذروة {peak}:00 | 15 دقيقة", fill=(200,200,255))
-              img.save(f"output/THUMB_{code}.jpg")
-
-              title = f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح بقوة 100 حصان | {name} ذروة {peak}:00"
-              desc = f"""{flag} {name} {code} - ذروة {peak}:00 - 15 MIN
-
-⚠️ 90% ممنوع عنهم الجلوتين!
-
-⏱️ الفصول:
-00:00 مقدمة {name}
-02:30 لماذا الجلوتين ممنوع؟
-06:00 الارز مسموح - البديل الذهبي
-10:00 سر 100 حصان
-13:00 نظام 90 يوم
-
-#طيبات #{code} #GlutenFree #Peak{peak} #RiceAllowed
-تعليمي فقط - استشر طبيبك
-"""
-              open(f"output/TITLE_{code}.txt","w",encoding="utf-8").write(title)
-              open(f"output/DESC_{code}.txt","w",encoding="utf-8").write(desc)
-
-              # 200 لغة مختصرة
-              langs = ["en","es","fr","de","ar","tr","ur","hi","zh","ja","ko","ru","pt","it","nl","pl","fi","se","no","dk"]
-              for lg in langs:
-                  open(f"output/TRANS_{code}_{lg}.txt","w",encoding="utf-8").write(f"[{lg}][{code}]{title}")
-
-              # Audio 15min = 900s
-              script = f"اهلا {name} {code} ذروة {peak}. تسعين في المئة ممنوع عنهم الجلوتين. الجلوتين في القمح يسبب التهابا وتعبا. الارز مسموح خفيف ويعطي طاقة نظيفة. سر قوة مئة حصان عند منع الجلوتين واكل الارز المسموح. جرب طيبات تسعين يوما. " * 18
-              open(f"output/script_{code}.txt","w",encoding="utf-8").write(script)
-              os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'Hello {name} {code}' 2>/dev/null")
-              os.system(f"ffmpeg -y -stream_loop 50 -i output/voice_{code}.wav -t 900 output/audio_{code}.wav -y 2>/dev/null || ffmpeg -y -f lavfi -i anullsrc -t 900 output/audio_{code}.wav -y")
-              os.system(f"ffmpeg -y -loop 1 -r 30 -i output/THUMB_{code}.jpg -i output/audio_{code}.wav -t 900 -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p -shortest output/VIDEO_{flag}_{code}_15MIN.mp4 -y 2>/dev/null")
-
-              # Upload YouTube
-              if yt:
-                  try:
-                      media = MediaFileUpload(f"output/VIDEO_{flag}_{code}_15MIN.mp4", mimetype="video/mp4", resumable=True, chunksize=1024*1024*5)
-                      req = yt.videos().insert(part="snippet,status", body={"snippet":{"title":title[:95],"description":desc,"tags":[code,name,"طيبات","GlutenFree",f"Peak{peak}"],"categoryId":"22"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}, media_body=media)
-                      res = None
-                      while res is None:
-                          status, res = req.next_chunk()
-                      print(f"✅ UPLOADED {flag} {code}: https://youtu.be/{res['id']}")
-                      open(f"output/YOUTUBE_{code}_URL.txt","w").write(f"https://youtu.be/{res['id']}\n{title}")
-                  except Exception as e:
-                      print(f"❌ Upload {code} failed: {e}")
-                      import traceback; traceback.print_exc()
-
-          open("output/README.txt","w").write(f"4 VIDEOS 15MIN YOUTUBE FROM 16: {sel}")
-          print("=== DONE v53 ===")
+            img=Image.new('RGB',(1280,720),(8,8,25))
+            d=ImageDraw.Draw(img)
+            d.rectangle([80,80,560,640],fill=(10,10,10))
+            d.text((120,150),f"90% ممنوع! {flag} {code}",fill=(255,255,255))
+            d.text((120,250),f"{name} ذروة {peak}",fill=(0,255,180))
+            img.save(f"output/THUMB_{code}.jpg")
+            title=f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح 100 حصان {name} ذروة {peak}:00"
+            open(f"output/TITLE_{code}.txt","w",encoding="utf-8").write(title)
+            open(f"output/script_{code}.txt","w",encoding="utf-8").write(f"اهلا {name} {code} ذروة {peak} الجلوتين ممنوع والارز مسموح " * 20)
+            os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'hi' 2>/dev/null")
+            os.system(f"ffmpeg -y -stream_loop 50 -i output/voice_{code}.wav -t 900 output/audio_{code}.wav -y 2>/dev/null")
+            os.system(f"ffmpeg -y -loop 1 -i output/THUMB_{code}.jpg -i output/audio_{code}.wav -t 900 -c:v libx264 -preset ultrafast -shortest output/VIDEO_{code}.mp4 -y 2>/dev/null")
+            if yt:
+              try:
+                media=MediaFileUpload(f"output/VIDEO_{code}.mp4",resumable=True)
+                req=yt.videos().insert(part="snippet,status",body={"snippet":{"title":title[:90],"description":title,"categoryId":"22"},"status":{"privacyStatus":"public"}},media_body=media)
+                res=req.execute()
+                print(f"UPLOADED {code}: https://youtu.be/{res['id']}")
+              except Exception as e:
+                print(f"Upload {code} error: {e}")
+          print("DONE")
           PY
-
-      - name: Check Files
-        run: ls -lh output/ | head -50
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: YOUTUBE-15MIN-16-COUNTRIES
+          name: videos
           path: output/
-          retention-days: 5
