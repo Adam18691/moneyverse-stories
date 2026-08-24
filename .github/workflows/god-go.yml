@@ -1,10 +1,10 @@
-name: GOD v48 - 4 FROM 16 COUNTRIES PEAK
+name: GOD v48 FINAL - 16 COUNTRIES 200 LANG 4 PEAK ALL MERGED
 on:
   schedule:
-    - cron: '0 17 * * *' # ذروة مصر 8 مساء = 15 UTC
-    - cron: '0 18 * * *' # ذروة اوروبا 8 مساء = 18 UTC
-    - cron: '0 0 * * *' # ذروة امريكا/كندا 8 مساء EST = 0 UTC
-    - cron: '0 10 * * *' # ذروة استراليا/نيوزيلندا 8 مساء = 10 UTC
+    - cron: '0 17 * * *' # 8م مصر/السعودية/فرنسا = 17 UTC
+    - cron: '0 18 * * *' # 8م اوروبا سويسرا المانيا هولندا بلجيكا النمسا = 18 UTC
+    - cron: '0 0 * * *' # 8م امريكا كندا = 0 UTC
+    - cron: '0 10 * * *' # 8م استراليا نيوزيلندا = 10 UTC
   workflow_dispatch:
 jobs:
   build:
@@ -19,6 +19,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-noto-core fonts-noto-naskh-arabic espeak
           pip install Pillow -q
+          go mod init tayyibat 2>/dev/null || true
+          go get github.com/philippgille/chromem-go golang.org/x/oauth2 google.golang.org/api/youtube/v3
           go mod tidy
           go run main.go
         env:
@@ -26,4 +28,4 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
       - uses: actions/upload-artifact@v4
-        with: { name: tayyibat-16countries-4peak-${{ github.run_number }}, path: output/ }
+        with: { name: tayyibat-v48-FINAL-16C-200LANG-4PEAK-${{ github.run_number }}, path: output/ }
