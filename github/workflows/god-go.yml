@@ -1,0 +1,28 @@
+name: GOD Go v29 FINAL - 45s
+on:
+  schedule:
+    - cron: '0 19 * * *' # EG 21:00
+    - cron: '0 18 * * *' # ZW Harare 20:00
+    - cron: '0 17 * * *' # AE 21:00
+    - cron: '0 23 * * *' # US 19:00
+  workflow_dispatch:
+jobs:
+  god-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Install FFmpeg + Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          go mod tidy
+      - name: Generate Video 4K - Full Folder v29 Go
+        run: |
+          go run main.go
+          echo "=== FULL FOLDER ==="
+          ls -lh output/tayyibat_v29_FINAL_GO_4K_ZW_Q4_60fps/
+          ls -lh output/tayyibat_v29_FINAL_GO_4K_ZW_Q4_60fps/tayyibat_v29_FINAL_GO_4K_ZW_Q4_60fps.mp4
