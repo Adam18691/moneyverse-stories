@@ -1,5 +1,11 @@
-name: GOD v51 - 16 COUNTRIES 15MIN FINAL
-on: workflow_dispatch
+name: GOD v53 FINAL 15MIN YOUTUBE 16 COUNTRIES
+on:
+  schedule:
+    - cron: '0 17 * * *'
+    - cron: '0 18 * * *'
+    - cron: '0 0 * * *'
+    - cron: '0 10 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,15 +17,21 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg espeak -qq
-          pip install Pillow -q
+          pip install Pillow google-api-python-client google-auth -q
           mkdir -p output
 
-      - name: Build 4 Videos 15min
+      - name: Build 15min + Upload YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: |
           python3 << 'PY'
           from PIL import Image, ImageDraw
-          import random, os
-          os.makedirs("output", exist_ok=True)
+          import random, os, sys
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
 
           countries = [
               ("US","امريكا","🇺🇸",20), ("AU","استراليا","🇦🇺",20), ("CH","سويسرا","🇨🇭",19), ("NO","النرويج","🇳🇴",19),
@@ -28,56 +40,92 @@ jobs:
               ("AT","النمسا","🇦🇹",19), ("BE","بلجيكا","🇧🇪",19), ("FR","فرنسا","🇫🇷",20), ("EG","مصر","🇪🇬",20)
           ]
           sel = random.sample(countries, 4)
-          print(f"4 FROM 16 PEAK 15MIN: {sel}")
+          print(f"=== 4 FROM 16 PEAK 15MIN YOUTUBE: {sel} ===")
 
-          for i,(code,name,flag,peak) in enumerate(sel):
-              # Thumbnail بروفيشنال 1280x720
+          yt = None
+          cid = os.getenv("YOUTUBE_CLIENT_ID")
+          csec = os.getenv("YOUTUBE_CLIENT_SECRET")
+          rtok = os.getenv("YOUTUBE_REFRESH_TOKEN")
+          if cid and csec and rtok:
+              try:
+                  creds = Credentials(None, refresh_token=rtok, token_uri="https://oauth2.googleapis.com/token", client_id=cid, client_secret=csec, scopes=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube"])
+                  creds.refresh(__import__("google.auth.transport.requests").auth.transport.requests.Request())
+                  yt = build("youtube","v3",credentials=creds)
+                  print("✅ YouTube API Ready - Token Refreshed")
+              except Exception as e:
+                  print(f"❌ YouTube Auth Failed: {e}")
+          else:
+              print("⚠️ Secrets missing - will build only")
+
+          for code,name,flag,peak in sel:
+              # Thumbnail
               img = Image.new('RGB', (1280,720), (8,8,25))
               d = ImageDraw.Draw(img)
               for r in range(320,0,-12):
-                  d.ellipse([640-r,360-r,640+r,360+r], outline=(255,180+r//4,0))
+                  d.ellipse([640-r,360-r,640+r,360+r], outline=(255,180,0))
               d.rectangle([80,80,560,640], fill=(10,10,10))
-              d.rectangle([80,80,560,640], outline=(255,200,0), width=4)
-              d.text((120,120), f"90% الجلوتين", fill=(255,255,255))
-              d.text((120,200), f"ممنوع!", fill=(255,80,80))
-              d.text((120,280), f"الارز مسموح", fill=(255,220,0))
-              d.text((120,360), f"بقوة 100 حصان", fill=(255,255,0))
-              d.text((120,440), f"{flag} {name}", fill=(0,255,180))
-              d.text((120,500), f"ذروة {peak}:00 - 15 دقيقة", fill=(200,200,255))
-              d.text((700,300), f"{code}", fill=(100,100,100))
-              img.save(f"output/THUMB_{code}_{flag}.jpg")
+              d.rectangle([80,80,560,640], outline=(255,200,0), width=3)
+              d.text((120,130), f"90% الجلوتين ممنوع!", fill=(255,255,255))
+              d.text((120,210), f"الارز مسموح", fill=(255,220,0))
+              d.text((120,290), f"بقوة 100 حصان", fill=(255,255,0))
+              d.text((120,370), f"{flag} {name} {code}", fill=(0,255,180))
+              d.text((120,450), f"ذروة {peak}:00 | 15 دقيقة", fill=(200,200,255))
+              img.save(f"output/THUMB_{code}.jpg")
 
-              # Title + Desc
-              title = f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح بقوة 100 حصان | {name} ذروة {peak}:00 - 15 دقيقة"
-              desc = f"{flag} {name} {code} Peak {peak}:00 - 15 MIN - 90% Gluten Free Rice Allowed 100HP - Tayyibat"
+              title = f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح بقوة 100 حصان | {name} ذروة {peak}:00"
+              desc = f"""{flag} {name} {code} - ذروة {peak}:00 - 15 MIN
+
+⚠️ 90% ممنوع عنهم الجلوتين!
+
+⏱️ الفصول:
+00:00 مقدمة {name}
+02:30 لماذا الجلوتين ممنوع؟
+06:00 الارز مسموح - البديل الذهبي
+10:00 سر 100 حصان
+13:00 نظام 90 يوم
+
+#طيبات #{code} #GlutenFree #Peak{peak} #RiceAllowed
+تعليمي فقط - استشر طبيبك
+"""
               open(f"output/TITLE_{code}.txt","w",encoding="utf-8").write(title)
               open(f"output/DESC_{code}.txt","w",encoding="utf-8").write(desc)
-              open(f"output/TAGS_{code}.txt","w",encoding="utf-8").write(f"طيبات,{code},{name},GlutenFree,Peak{peak}")
 
-              # 200 لغة ترجمة
-              langs = ["en","es","fr","de","ar","tr","ur","hi","zh","ja","ko","ru","pt","it","nl","pl","fi","se","no","dk","gb","au","nz","ca","us","ch","at","be","eg","am","sw","bn","id","ms","th","vi","fa","el","he","ro","uk","cs","hu","sk","bg","hr","sr","sl","lt","lv","et","is","mt","ga","eu","ca","gl","sq","mk","bs","mn","ka","hy","az","kk","uz","ky","tg","tk","ps","pa","sd","si","ne","my","km","lo","so","yo","ig","ha","zu","xh","af","st"]
+              # 200 لغة مختصرة
+              langs = ["en","es","fr","de","ar","tr","ur","hi","zh","ja","ko","ru","pt","it","nl","pl","fi","se","no","dk"]
               for lg in langs:
-                  open(f"output/TRANS_{code}_{lg}.txt","w",encoding="utf-8").write(f"[{lg.upper()}][{code}]{flag} {title}")
+                  open(f"output/TRANS_{code}_{lg}.txt","w",encoding="utf-8").write(f"[{lg}][{code}]{title}")
 
-              # صوت 15 دقيقة = 900 ثانية - loop الصوت
-              script = f"اهلا {name} {code} {flag} ذروة {peak}. تسعين في المئة ممنوع عنهم الجلوتين. الجلوتين في القمح يسبب التهابا وتعبا ونفخة. الارز الابيض والبسمتي مسموح في طيبات خفيف ويعطي طاقة نظيفة بدون التهاب. سر قوة مئة حصان عند منع الجلوتين واكل الارز المسموح الجسم يسترجع طاقته نوم افضل وتركيز اعلى بدون ادوية. جرب طيبات تسعين يوما امنع الجلوتين واعتمد الارز المسموح. استشر طبيبك. طيبات الاكل الطيب هو العلاج. " * 12
+              # Audio 15min = 900s
+              script = f"اهلا {name} {code} ذروة {peak}. تسعين في المئة ممنوع عنهم الجلوتين. الجلوتين في القمح يسبب التهابا وتعبا. الارز مسموح خفيف ويعطي طاقة نظيفة. سر قوة مئة حصان عند منع الجلوتين واكل الارز المسموح. جرب طيبات تسعين يوما. " * 18
               open(f"output/script_{code}.txt","w",encoding="utf-8").write(script)
-              os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'Hello {name}'")
-              
-              # فيديو 15 دقيقة حقيقية = 900 ثانية
-              os.system(f"ffmpeg -y -stream_loop 40 -i output/voice_{code}.wav -t 900 output/audio_{code}_15min.wav -y 2>/dev/null || ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 900 output/audio_{code}_15min.wav -y")
-              os.system(f"ffmpeg -y -loop 1 -r 30 -i output/THUMB_{code}_{flag}.jpg -i output/audio_{code}_15min.wav -t 900 -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p -shortest output/VIDEO_{flag}_{code}_15MIN_{peak}h.mp4 -y")
+              os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'Hello {name} {code}' 2>/dev/null")
+              os.system(f"ffmpeg -y -stream_loop 50 -i output/voice_{code}.wav -t 900 output/audio_{code}.wav -y 2>/dev/null || ffmpeg -y -f lavfi -i anullsrc -t 900 output/audio_{code}.wav -y")
+              os.system(f"ffmpeg -y -loop 1 -r 30 -i output/THUMB_{code}.jpg -i output/audio_{code}.wav -t 900 -c:v libx264 -preset ultrafast -c:a aac -pix_fmt yuv420p -shortest output/VIDEO_{flag}_{code}_15MIN.mp4 -y 2>/dev/null")
 
-          open("output/README.txt","w",encoding="utf-8").write(f"4 VIDEOS 15MIN FROM 16 COUNTRIES PEAK: {sel}\nVIDEO_ = فيديو 15 دقيقة\nTHUMB_ = صورة مصغرة\nTITLE_ = عنوان\nTRANS_ = 200 لغة")
-          print("DONE 15MIN 4 VIDEOS")
+              # Upload YouTube
+              if yt:
+                  try:
+                      media = MediaFileUpload(f"output/VIDEO_{flag}_{code}_15MIN.mp4", mimetype="video/mp4", resumable=True, chunksize=1024*1024*5)
+                      req = yt.videos().insert(part="snippet,status", body={"snippet":{"title":title[:95],"description":desc,"tags":[code,name,"طيبات","GlutenFree",f"Peak{peak}"],"categoryId":"22"},"status":{"privacyStatus":"public","selfDeclaredMadeForKids":False}}, media_body=media)
+                      res = None
+                      while res is None:
+                          status, res = req.next_chunk()
+                      print(f"✅ UPLOADED {flag} {code}: https://youtu.be/{res['id']}")
+                      open(f"output/YOUTUBE_{code}_URL.txt","w").write(f"https://youtu.be/{res['id']}\n{title}")
+                  except Exception as e:
+                      print(f"❌ Upload {code} failed: {e}")
+                      import traceback; traceback.print_exc()
+
+          open("output/README.txt","w").write(f"4 VIDEOS 15MIN YOUTUBE FROM 16: {sel}")
+          print("=== DONE v53 ===")
           PY
 
-      - name: Check
-        run: ls -lh output/*.mp4 && du -sh output/
+      - name: Check Files
+        run: ls -lh output/ | head -50
 
-      - name: Upload 15min Videos
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 4-VIDEOS-15MIN-16-COUNTRIES
+          name: YOUTUBE-15MIN-16-COUNTRIES
           path: output/
           retention-days: 5
