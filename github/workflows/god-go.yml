@@ -1,25 +1,40 @@
-name: GOD Go v36 SECRET 1000 + 200 LANG DUB ALL COLLECTED
+name: GOD Go v37 SECRET 1000 + 200 LANG DUB - FIXED
 on:
   schedule:
-    - cron: '3 18 * * *' # ZW 20:03:15 Golden 1000 + 200 LANG
-    - cron: '3 19 * * *'
-    - cron: '3 17 * * *'
-    - cron: '3 23 * * *'
+    - cron: '3 18 * * *' # ZW 20:03:15 Golden Hour - Harare 98% online
   workflow_dispatch:
+
 jobs:
   god-go:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.22' }
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: Install Deps Fixed
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-dejavu-core libgl1-mesa-glx
+          ffmpeg -version
           go mod tidy
+          go mod download
+      - name: Run GOD Go v37 - 1000 Model + 200 Lang
+        run: |
+          mkdir -p output
           go run main.go
-          echo "=== 1000 MODEL + 200 LANG DUB ALL COLLECTED ==="
-          ls -lh output/tayyibat_v36_SECRET_1000_MODEL_200_LANG_DUB_4K_ZW_Q4_60fps/
-          ls output/tayyibat_v36_SECRET_1000_MODEL_200_LANG_DUB_4K_ZW_Q4_60fps/200lang/ | wc -l
-          ls output/tayyibat_v36_SECRET_1000_MODEL_200_LANG_DUB_4K_ZW_Q4_60fps/dub/ | wc -l
-          ls output/tayyibat_v36_SECRET_1000_MODEL_200_LANG_DUB_4K_ZW_Q4_60fps/srt/ | wc -l
+          echo "=== FULL FOLDER ==="
+          ls -lh output/
+          ls output/tayyibat_v37_SECRET_1000_200_LANG_DUB_4K_ZW_Q4_60fps/ | head -20
+          echo "=== 200 LANG COUNT ==="
+          ls output/tayyibat_v37_SECRET_1000_200_LANG_DUB_4K_ZW_Q4_60fps/200lang/ | wc -l
+          ls output/tayyibat_v37_SECRET_1000_200_LANG_DUB_4K_ZW_Q4_60fps/dub/ | wc -l
+          ls output/tayyibat_v37_SECRET_1000_200_LANG_DUB_4K_ZW_Q4_60fps/srt/ | wc -l
+          cat output/title.txt
+      - name: Upload Artifacts - 1000 + 200
+        uses: actions/upload-artifact@v4
+        with:
+          name: tayyibat-v37-1000-200lang
+          path: output/
+          retention-days: 90
