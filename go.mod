@@ -10,3 +10,9 @@ require (
     github.com/tmc/langchaingo v0.1.13
     github.com/u2takey/ffmpeg-go v0.5.0
 )
+
+require (
+    github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 indirect
+    golang.org/x/image v0.18.0 indirect
+    golang.org/x/sys v0.20.0 indirect
+)
