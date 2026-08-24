@@ -1,64 +1,18 @@
-name: GOD FINAL
-on:
-  workflow_dispatch:
-
+name: Tayyibat God
+on: workflow_dispatch
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install
-        run: |
-          sudo apt-get install -y ffmpeg espeak -qq
-          pip install Pillow google-api-python-client google-auth -q
-          mkdir -p output
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go mod tidy
       - name: Run
         env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        run: |
-          python3 << 'PY'
-          from PIL import Image, ImageDraw
-          import random, os
-          from google.oauth2.credentials import Credentials
-          from googleapiclient.discovery import build
-          from googleapiclient.http import MediaFileUpload
-          countries = [("US","امريكا","🇺🇸",20),("AU","استراليا","🇦🇺",20),("CH","سويسرا","🇨🇭",19),("NO","النرويج","🇳🇴",19),("NZ","نيوزيلندا","🇳🇿",20),("CA","كندا","🇨🇦",20),("DE","المانيا","🇩🇪",19),("DK","الدنمارك","🇩🇰",19),("GB","بريطانيا","🇬🇧",19),("NL","هولندا","🇳🇱",19),("FI","فنلندا","🇫🇮",19),("SE","السويد","🇸🇪",19),("AT","النمسا","🇦🇹",19),("BE","بلجيكا","🇧🇪",19),("FR","فرنسا","🇫🇷",20),("EG","مصر","🇪🇬",20)]
-          sel = random.sample(countries, 4)
-          print(f"4 FROM 16: {sel}")
-          yt=None
-          try:
-            creds=Credentials(None,refresh_token=os.getenv("YOUTUBE_REFRESH_TOKEN"),token_uri="https://oauth2.googleapis.com/token",client_id=os.getenv("YOUTUBE_CLIENT_ID"),client_secret=os.getenv("YOUTUBE_CLIENT_SECRET"),scopes=["https://www.googleapis.com/auth/youtube.upload"])
-            creds.refresh(__import__("google.auth.transport.requests").auth.transport.requests.Request())
-            yt=build("youtube","v3",credentials=creds)
-            print("YouTube Ready")
-          except Exception as e:
-            print(f"YouTube fail: {e}")
-          for code,name,flag,peak in sel:
-            img=Image.new('RGB',(1280,720),(8,8,25))
-            d=ImageDraw.Draw(img)
-            d.rectangle([80,80,560,640],fill=(10,10,10))
-            d.text((120,150),f"90% ممنوع! {flag} {code}",fill=(255,255,255))
-            d.text((120,250),f"{name} ذروة {peak}",fill=(0,255,180))
-            img.save(f"output/THUMB_{code}.jpg")
-            title=f"{flag} [{code}] 90% الجلوتين ممنوع! الارز مسموح 100 حصان {name} ذروة {peak}:00"
-            open(f"output/TITLE_{code}.txt","w",encoding="utf-8").write(title)
-            open(f"output/script_{code}.txt","w",encoding="utf-8").write(f"اهلا {name} {code} ذروة {peak} الجلوتين ممنوع والارز مسموح " * 20)
-            os.system(f"espeak -v ar -s 120 -w output/voice_{code}.wav -f output/script_{code}.txt 2>/dev/null || espeak -v en -w output/voice_{code}.wav 'hi' 2>/dev/null")
-            os.system(f"ffmpeg -y -stream_loop 50 -i output/voice_{code}.wav -t 900 output/audio_{code}.wav -y 2>/dev/null")
-            os.system(f"ffmpeg -y -loop 1 -i output/THUMB_{code}.jpg -i output/audio_{code}.wav -t 900 -c:v libx264 -preset ultrafast -shortest output/VIDEO_{code}.mp4 -y 2>/dev/null")
-            if yt:
-              try:
-                media=MediaFileUpload(f"output/VIDEO_{code}.mp4",resumable=True)
-                req=yt.videos().insert(part="snippet,status",body={"snippet":{"title":title[:90],"description":title,"categoryId":"22"},"status":{"privacyStatus":"public"}},media_body=media)
-                res=req.execute()
-                print(f"UPLOADED {code}: https://youtu.be/{res['id']}")
-              except Exception as e:
-                print(f"Upload {code} error: {e}")
-          print("DONE")
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: videos
-          path: output/
+        run: go run.
