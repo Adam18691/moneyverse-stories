@@ -1,19 +1,23 @@
-name: GOD PURE Go - 4x15min
+name: GOD Parallel 10x
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
       - run: sudo apt-get update && sudo apt-get install -y melt ffmpeg
-      - run: go mod tidy && go run main.go
+      - run: go mod tidy
+      - run: go run main.go
       - uses: actions/upload-artifact@v4
         with:
-          name: videos
+          name: tayyibat-4x15min
           path: output/*.mp4
