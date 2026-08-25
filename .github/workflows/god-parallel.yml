@@ -1,23 +1,38 @@
-name: GOD Parallel 10x
+name: ⏰ Scheduled Publisher
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 */2 * * *'   # كل ساعتين — يغطي كل نوافذ الذروة
   workflow_dispatch:
 
+permissions:
+  contents: write            # ضروري للـ commit التلقائي
+
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+
+      - name: Restore Schedule State
+        uses: actions/cache@v4
         with:
-          go-version: '1.22'
-      - run: sudo apt-get update && sudo apt-get install -y melt ffmpeg
+          path: schedule/pending.json
+          key: pending-${{ github.run_id }}
+          restore-keys: pending-
+
       - run: go mod tidy
-      - run: go run main.go
-      - uses: actions/upload-artifact@v4
+      - name: 📤 Check & Publish Due Videos
+        run: go run publish.go
+        env:
+          YOUTUBE_CREDENTIALS: ${{ secrets.YOUTUBE_CREDENTIALS }}
+
+      - name: 💾 Save State Back
+        if: always()
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          name: tayyibat-4x15min
-          path: output/*.mp4
+          commit_message: "⏰ update publish schedule state [skip ci]"
+          file_pattern: schedule/pending.json
