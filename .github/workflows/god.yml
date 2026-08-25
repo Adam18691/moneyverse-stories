@@ -1,44 +1,78 @@
-name: build-and-run
+name: build-upload-youtube-auto
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build-and-run:
+  build-and-upload:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Tools - FFmpeg Melt Fonts
+      - name: Install FFmpeg Melt Python
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg melt fonts-dejavu-core fonts-freefont-ttf
+          sudo apt-get install -y ffmpeg melt fonts-dejavu-core python3-pip
+          pip3 install youtube-upload --break-system-packages
           ffmpeg -version
           melt --version
-          fc-list | head -20
 
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.22'
 
-      - name: Run - GOD v45 - 15MIN 7SEC HOOK 10 ANGLES FIXED
+      - name: Build 4 Videos 15MIN V46
         run: |
           go mod tidy || go mod init tayyibat-mega-v14-god
           go mod tidy
           go run main.go
-          echo "==== FINAL FILES ===="
-          ls -lh *.mp4
-          ls -lh *.wav
-          du -sh *
+          echo "=== BUILT ==="
+          ls -lh FINAL*.mp4
 
-      - name: Upload - 4 Videos 15Min Cinematic Pro
-        uses: actions/upload-artifact@v4
-        with:
-          name: TAYYIBAT-15MIN-4VIDEOS-FIXED
-          path: |
-            FINAL*.mp4
-            *.txt
-          if-no-files-found: error
-          retention-days: 10
+      - name: Upload 4 Videos Direct to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          cat > client_secrets.json <<EOF
+          {"installed":{"client_id":"$YOUTUBE_CLIENT_ID","client_secret":"$YOUTUBE_CLIENT_SECRET","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}
+          EOF
+
+          cat > credentials.json <<EOF
+          {"access_token":"ya29.fake","client_id":"$YOUTUBE_CLIENT_ID","client_secret":"$YOUTUBE_CLIENT_SECRET","refresh_token":"$YOUTUBE_REFRESH_TOKEN","token_expiry":"2030-12-31T00:00:00Z","token_uri":"https://oauth2.googleapis.com/token","scopes":["https://www.googleapis.com/auth/youtube.upload"]}
+          EOF
+
+          i=1
+          for f in FINAL*.mp4; do
+            echo "UPLOADING $f TO YOUTUBE - VIDEO $i"
+            python3 -m youtube_upload \
+              --client-secrets client_secrets.json \
+              --credentials-file credentials.json \
+              --title "[$i/4] \$1000 الى \$10000 حلال 100% - 10 زوايا كاميرا مستخبية - سر المميزين" \
+              --description "السر الحقيقي لتحويل \$1000 الى \$10000 حلال 100% بدون ربا
+
+            00:00 مقدمة 7 ثواني تخطف
+            00:07 LOW HERO - هيبة المستثمر
+            01:35 BIRD EYE - شايف كل الفلوس من فوق
+            03:00 WORM EYE - ضخامة الذهب الحلال
+            04:30 DUTCH 15° - توتر سينمائي
+            06:00 POV - انت البطل
+            08:00 CLOSE-UP - عد الفلوس بايدك
+            10:00 WIDE - 195 دولة
+            11:30 TRACKING - مونتاج دولي
+
+            #حلال #استثمار_حلال #بدون_ربا #ذهب #اسهم_حلال #TAYYIBAT
+
+            الموسيقى: Original 432Hz - No Copyright - 100% Own
+            الفيديو: Original Melt+FFmpeg - No Stock Footage - Safe for Monetization" \
+              --category Education \
+              --privacy public \
+              --tags "halal investment,islamic finance,gold,halal stocks" \
+              "$f"
+            i=$((i+1))
+            sleep 10
+          done
+          echo "✅ ALL 4 VIDEOS UPLOADED TO YOUTUBE"
