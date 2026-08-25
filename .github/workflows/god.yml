@@ -1,30 +1,46 @@
-name: GOD v29 PURE 4K 60fps
+name: build-and-run
 on:
   push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg and Melt - Cinematic Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg mlt melt fonts-noto-color-emoji fonts-dejavu-core
+          ffmpeg -version
+          melt --version
+          echo "✅ FFmpeg + Melt installed"
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
         with:
           go-version: '1.22'
-      - name: Install FFmpeg Only
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y ffmpeg
-          ffmpeg -version
-      - name: Run GOD v29
+
+      - name: Run GOD v44 - 15 MIN + 7 SEC HOOK + 10 HIDDEN ANGLES
         run: |
           go mod tidy
           go run main.go
+          echo "=== FILES CREATED ==="
           ls -lh
-      - name: Upload
-        if: always()
+          ls -lh *.mp4 || echo "No mp4 yet"
+          ls -lh *.wav || echo "No wav yet"
+
+      - name: Upload - 4 Videos 15 Min Cinematic
         uses: actions/upload-artifact@v4
         with:
-          name: final
-          path: final.mp4
+          name: TAYYIBAT-4-VIDEOS-15MIN-CINEMATIC-PRO
+          path: |
+            FINAL*.mp4
+            *.mp4
+            *.wav
+            *.txt
           if-no-files-found: warn
+          retention-days: 7
