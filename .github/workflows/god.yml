@@ -1,4 +1,4 @@
-name: build-upload-youtube-auto
+name: build-and-upload
 on:
   push:
     branches: [ main ]
@@ -10,11 +10,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install FFmpeg Melt Python
+      - name: Install FFmpeg Melt Python Google API
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg melt fonts-dejavu-core python3-pip
-          pip3 install youtube-upload --break-system-packages
+          sudo apt-get install -y ffmpeg melt fonts-dejavu-core
+          pip3 install --break-system-packages google-api-python-client google-auth-httplib2 google-auth-oauthlib
           ffmpeg -version
           melt --version
 
@@ -23,56 +23,70 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Build 4 Videos 15MIN V46
+      - name: Build 4 Videos 15MIN V47
         run: |
-          go mod tidy || go mod init tayyibat-mega-v14-god
+          go mod tidy || go mod init tayyibat
           go mod tidy
           go run main.go
-          echo "=== BUILT ==="
           ls -lh FINAL*.mp4
 
-      - name: Upload 4 Videos Direct to YouTube
+      - name: Upload to YouTube - Direct Google API
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: |
-          cat > client_secrets.json <<EOF
-          {"installed":{"client_id":"$YOUTUBE_CLIENT_ID","client_secret":"$YOUTUBE_CLIENT_SECRET","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}
-          EOF
+          cat > upload.py << 'PY'
+          import os, sys
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
 
-          cat > credentials.json <<EOF
-          {"access_token":"ya29.fake","client_id":"$YOUTUBE_CLIENT_ID","client_secret":"$YOUTUBE_CLIENT_SECRET","refresh_token":"$YOUTUBE_REFRESH_TOKEN","token_expiry":"2030-12-31T00:00:00Z","token_uri":"https://oauth2.googleapis.com/token","scopes":["https://www.googleapis.com/auth/youtube.upload"]}
-          EOF
+          CLIENT_ID=os.environ['YOUTUBE_CLIENT_ID']
+          CLIENT_SECRET=os.environ['YOUTUBE_CLIENT_SECRET']
+          REFRESH_TOKEN=os.environ['YOUTUBE_REFRESH_TOKEN']
 
-          i=1
-          for f in FINAL*.mp4; do
-            echo "UPLOADING $f TO YOUTUBE - VIDEO $i"
-            python3 -m youtube_upload \
-              --client-secrets client_secrets.json \
-              --credentials-file credentials.json \
-              --title "[$i/4] \$1000 الى \$10000 حلال 100% - 10 زوايا كاميرا مستخبية - سر المميزين" \
-              --description "السر الحقيقي لتحويل \$1000 الى \$10000 حلال 100% بدون ربا
+          creds = Credentials(
+              None,
+              refresh_token=REFRESH_TOKEN,
+              token_uri='https://oauth2.googleapis.com/token',
+              client_id=CLIENT_ID,
+              client_secret=CLIENT_SECRET,
+              scopes=['https://www.googleapis.com/auth/youtube.upload']
+          )
+          youtube = build('youtube', 'v3', credentials=creds)
 
-            00:00 مقدمة 7 ثواني تخطف
-            00:07 LOW HERO - هيبة المستثمر
-            01:35 BIRD EYE - شايف كل الفلوس من فوق
-            03:00 WORM EYE - ضخامة الذهب الحلال
-            04:30 DUTCH 15° - توتر سينمائي
-            06:00 POV - انت البطل
-            08:00 CLOSE-UP - عد الفلوس بايدك
-            10:00 WIDE - 195 دولة
-            11:30 TRACKING - مونتاج دولي
+          import glob
+          files = sorted(glob.glob('FINAL*.mp4'))
+          for idx, f in enumerate(files, 1):
+              title = f"[{idx}/4] $1000 الى $10000 حلال 100% - 10 زوايا كاميرا مستخبية - سر المميزين"
+              desc = f"""{title}
 
-            #حلال #استثمار_حلال #بدون_ربا #ذهب #اسهم_حلال #TAYYIBAT
+          00:00 Hook 7 ثواني - $1000 -> $10000 حلال
+          00:07 LOW HERO - هيبة
+          01:35 BIRD EYE - سيطرة
+          03:00 WORM EYE - ضخامة الذهب
+          04:30 DUTCH 15 - توتر سينمائي
+          06:00 POV - انت البطل
+          08:00 CLOSE-UP GOLD
+          10:00 WIDE 195 دولة
+          11:30 TRACKING
 
-            الموسيقى: Original 432Hz - No Copyright - 100% Own
-            الفيديو: Original Melt+FFmpeg - No Stock Footage - Safe for Monetization" \
-              --category Education \
-              --privacy public \
-              --tags "halal investment,islamic finance,gold,halal stocks" \
-              "$f"
-            i=$((i+1))
-            sleep 10
-          done
-          echo "✅ ALL 4 VIDEOS UPLOADED TO YOUTUBE"
+          #حلال #استثمار_حلال #بدون_ربا #ذهب #TAYYIBAT
+
+          الموسيقى: Original 432Hz - No Copyright - 100% Own - Safe for Monetization
+          الفيديو: Original Melt+FFmpeg - No Stock - 100% Own"""
+
+              print(f"UPLOADING {f} -> {title}")
+              request = youtube.videos().insert(
+                  part="snippet,status",
+                  body={
+                      "snippet": {"title": title, "description": desc, "tags": ["halal investment","islamic finance","gold","no riba","TAYYIBAT"], "categoryId": "27"},
+                      "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+                  },
+                  media_body=MediaFileUpload(f, chunksize=-1, resumable=True)
+              )
+              response = request.execute()
+              print(f"✅ UPLOADED VIDEO ID: {response['id']} - https://youtu.be/{response['id']}")
+          PY
+          python3 upload.py
