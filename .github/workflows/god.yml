@@ -1,5 +1,8 @@
 name: GOD v29 PURE 4K 60fps
-on: [push]
+on:
+  push:
+  workflow_dispatch:
+
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
