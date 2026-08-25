@@ -17,7 +17,7 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Install Engine Stack (بدون FFmpeg)
+      - name: Install Engine Stack
         run: |
           sudo apt-get update && sudo apt-get install -y \
             gstreamer1.0-tools gstreamer1.0-plugins-good \
@@ -25,7 +25,23 @@ jobs:
             melt imagemagick piper espeak-ng
 
       - name: Write YouTube Credentials
-        run: echo '${{ secrets.YOUTUBE_CREDENTIALS }}' > credentials/client_secret.json
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.YOUTUBE_CLIENT_ID }}" > credentials/client_id.txt
+          echo "${{ secrets.YOUTUBE_CLIENT_SECRET }}" > credentials/client_secret.txt
+          echo "${{ secrets.YOUTUBE_REFRESH_TOKEN }}" > credentials/refresh_token.txt
+          cat > credentials/client_secret.json << EOF
+          {
+            "installed": {
+              "client_id": "${{ secrets.YOUTUBE_CLIENT_ID }}",
+              "client_secret": "${{ secrets.YOUTUBE_CLIENT_SECRET }}",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "redirect_uris": ["https://developers.google.com/oauthplayground"]
+            }
+          }
+          EOF
 
       - run: go mod tidy
 
