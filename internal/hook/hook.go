@@ -3,16 +3,16 @@ package hook
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 )
 
-// HookEngine: يبني هوك 7 ثواني بتركيبة نفسية مثالية
 type Hook struct {
-	VisualScene   string // برومبت المشهد البصري
-	ScreenText    string // الكلمة الضخمة على الشاشة
-	VoiceLine     string // جملة الراوي
-	CuriosityLine string // "شاهد حتى النهاية"
-	Duration      float64 // دايماً 7.0
+	VisualScene   string
+	ScreenText    string
+	VoiceLine     string
+	CuriosityLine string
+	Duration      float64
 }
 
 var shockNumbers = []string{
@@ -34,7 +34,7 @@ func Generate(seed int) *Hook {
 		Duration: 7.0,
 		VisualScene: fmt.Sprintf(
 			"cinematic extreme close-up, burning banknotes and falling stock charts, "+
-				"dark moody lighting, gold particles floating, 8k photorealistic, film grain --ar 16:9"),
+				"dark moody lighting, gold particles floating, 8k photorealistic --ar 16:9"),
 		ScreenText:    num,
 		VoiceLine:     fmt.Sprintf("خسر %s.. %s", num, pick(rnd, paradoxLines)),
 		CuriosityLine: "والنهاية ستصدقك.. شاهد حتى الآخر",
@@ -42,3 +42,5 @@ func Generate(seed int) *Hook {
 }
 
 func pick(rnd *rand.Rand, s []string) string { return s[rnd.Intn(len(s))] }
+
+var _ = strings.Contains
