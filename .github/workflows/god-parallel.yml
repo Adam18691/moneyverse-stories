@@ -30,18 +30,9 @@ jobs:
           echo "${{ secrets.YOUTUBE_CLIENT_ID }}" > credentials/client_id.txt
           echo "${{ secrets.YOUTUBE_CLIENT_SECRET }}" > credentials/client_secret.txt
           echo "${{ secrets.YOUTUBE_REFRESH_TOKEN }}" > credentials/refresh_token.txt
-          cat > credentials/client_secret.json << EOF
-          {
-            "installed": {
-              "client_id": "${{ secrets.YOUTUBE_CLIENT_ID }}",
-              "client_secret": "${{ secrets.YOUTUBE_CLIENT_SECRET }}",
-              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-              "token_uri": "https://oauth2.googleapis.com/token",
-              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-              "redirect_uris": ["https://developers.google.com/oauthplayground"]
-            }
-          }
-          EOF
+          printf '{\n  "installed": {\n    "client_id": "%s",\n    "client_secret": "%s",\n    "auth_uri": "https://accounts.google.com/o/oauth2/auth",\n    "token_uri": "https://oauth2.googleapis.com/token",\n    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",\n    "redirect_uris": ["https://developers.google.com/oauthplayground"]\n  }\n}\n' "secrets.YOUTUBECLIENTID""{{ secrets.YOUTUBE_CLIENT_ID }}" "secrets.YOUTUBEC​LIENTI​D""{{ secrets.YOUTUBE_CLIENT_SECRET }}" > credentials/client_secret.json
+          echo "✅ Credentials written:"
+          ls -la credentials/
 
       - run: go mod tidy
 
