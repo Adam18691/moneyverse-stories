@@ -1,0 +1,24 @@
+name: GOD PURE Go - 4x15min + YouTube
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: sudo apt-get update && sudo apt-get install -y melt ffmpeg
+      - run: go mod tidy && go run main.go
+        env:
+          YOUTUBE_CREDENTIALS: ${{ secrets.YOUTUBE_CREDENTIALS }}
+          YOUTUBE_ACCESS_TOKEN: ${{ secrets.YOUTUBE_ACCESS_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videos
+          path: output/*.mp4
