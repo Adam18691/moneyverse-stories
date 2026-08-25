@@ -1,86 +1,27 @@
-name: TAYYIBAT GOD v29 PURE 4K 60fps
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+name: GOD v29 PURE 4K 60fps
+on: [push]
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go 1.22
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: '1.22'
-          cache: true
-
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Ultimate Hidden Pro - No FFmpeg
+      - name: Install FFmpeg Only
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y blender gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gpac sox nasm libopenal-dev
-          # Bento4 Dolby
-          wget -q https://www.bok.net/Bento4/bin/1-6-0-641/Bento4-SDK-1-6-0-641.x86_64-unknown-linux.zip || true
-          unzip -q Bento4-*.zip || true
-          sudo cp Bento4-*/bin/* /usr/local/bin/ 2>/dev/null || true
-          # SVT-AV1 Intel Netflix
-          git clone --depth 1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
-          cd SVT-AV1/Build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j4 && sudo make install || true
-          cd ../..
-          # Sherpa-ONNX US Army Go
-          wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.11/sherpa-onnx-v1.10.11-linux-x86_64-shared.tar.bz2
-          tar -xjf sherpa-onnx-*.tar.bz2 || true
-          sudo cp sherpa-onnx-*/lib/* /usr/local/lib/ -v 2>/dev/null || true
-          sudo ldconfig
-          # Shaka Google
-          wget -q https://github.com/shaka-project/shaka-packager/releases/download/v3.3.0/packager-linux-x64 -O packager || true
-          chmod +x packager; sudo mv packager /usr/local/bin/shaka-packager 2>/dev/null || true
-          pip install opentimelineio piper-tts edge-tts TTS yt-dlp -q || true
-          # تنظيف المشروع
-          rm -f ai_router.go security.go god.yml
-          mkdir -p frames output
-          go mod tidy
-          ls -la
-
-      - name: Gitleaks Check
-        uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🔥 Run GOD v29 Go PURE 4K 60fps - 8 Hidden Pro
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
-          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
-          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          SOURCE_YT_URL: ${{ secrets.SOURCE_YT_URL }}
-          PIPER_MODEL: ar_JO-kareem-medium.onnx
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+      - name: Run GOD v29
         run: |
+          go mod tidy
           go run main.go
-          ls -lh final.mp4 final_blender.mp4 || true
-
-      - name: Upload Artifact
+          ls -lh
+      - name: Upload
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tayyibat-final-4k-60fps
-          path: |
-            final.mp4
-            final_blender.mp4
-            thumb_pro.jpg
-            timeline.otio
-            scene.usda
+          name: final
+          path: final.mp4
+          if-no-files-found: warn
