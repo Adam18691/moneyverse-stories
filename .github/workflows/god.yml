@@ -8,33 +8,37 @@ jobs:
   build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install FFmpeg and Melt - Cinematic Tools
+      - name: Install Tools - FFmpeg Melt Fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg melt
+          sudo apt-get install -y ffmpeg melt fonts-dejavu-core fonts-freefont-ttf
           ffmpeg -version
           melt --version
+          fc-list | head -20
 
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.22'
 
-      - name: Run GOD v44
+      - name: Run - GOD v45 - 15MIN 7SEC HOOK 10 ANGLES FIXED
         run: |
+          go mod tidy || go mod init tayyibat-mega-v14-god
           go mod tidy
           go run main.go
+          echo "==== FINAL FILES ===="
           ls -lh *.mp4
           ls -lh *.wav
+          du -sh *
 
-      - name: Upload - 4 Videos 15 Min Cinematic
+      - name: Upload - 4 Videos 15Min Cinematic Pro
         uses: actions/upload-artifact@v4
         with:
-          name: TAYYIBAT-15MIN-4VIDEOS
+          name: TAYYIBAT-15MIN-4VIDEOS-FIXED
           path: |
             FINAL*.mp4
-            *.mp4
+            *.txt
           if-no-files-found: error
+          retention-days: 10
