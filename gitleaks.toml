@@ -1,0 +1,19 @@
+title = "Gitleaks config for Tayyibat"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow fake secrets for Tayyibat"
+paths = [
+    '''go.mod''',
+    '''go.sum''',
+]
+
+[[allowlist.regexes]]
+description = "Tayyibat dummy secrets"
+regex = '''Dopamine_Loop_05K_Secret|Authority_Doctor'''
+
+[[allowlist.regexes]]
+description = "Example keys in code"
+regex = '''sk-or-v1-EXAMPLE'''
