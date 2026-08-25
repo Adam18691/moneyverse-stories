@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/disintegration/imaging"
-	"github.com/k2-fsa/sherpa-onnx-go/sherpa_onnx"
 	"github.com/kkdai/youtube/v2"
 	"github.com/sashabaranov/go-openai"
 	"golang.org/x/oauth2"
@@ -120,14 +119,9 @@ func thumbOCIOBento4Go(title string) error {
 func voiceSherpaGo(text string) error {
 	fmt.Println("🎙️ [2/8] Sherpa-ONNX Go Native - k2-fsa US Army + OpenVoice V2")
 	// Sherpa-ONNX Go - ده المستخبي الحقيقي
-	if _, err := os.Stat("sherpa.onnx"); err == nil {
-		cfg := sherpa_onnx.OfflineTtsConfig{}
-		cfg.Model.Vits.Model = "./sherpa.onnx"
 		cfg.Model.Vits.Tokens = "./tokens.txt"
 		cfg.Model.NumThreads = 4
-		tts := sherpa_onnx.NewOfflineTts(&cfg)
 		audio := tts.Generate(text, 0, 0.9)
-		sherpa_onnx.WriteWave("voice.wav", audio.Samples, audio.SampleRate)
 		tts.Free()
 		fmt.Println("✅ Sherpa-ONNX Go")
 	} else {

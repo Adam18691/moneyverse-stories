@@ -71,14 +71,6 @@ github.com/googleapis/enterprise-certificate-proxy v0.3.2 h1:Vie5ybvEvT75RniqhfF
 github.com/googleapis/enterprise-certificate-proxy v0.3.2/go.mod h1:VLSiSSBs/ksPL8kq3OBOQ6WRI2QnaFynd1DCjZ62+V0=
 github.com/googleapis/gax-go/v2 v2.12.4 h1:9gWcmF85Wvq4ryPFvGFaOgPIs1AQX0d0bcbGw4Z96qg=
 github.com/googleapis/gax-go/v2 v2.12.4/go.mod h1:KYEYLorsnIGDi/rPC8b5TdlB9kbKoFubselGIoBMCwI=
-github.com/k2-fsa/sherpa-onnx-go v1.13.6 h1:JKFYKAJ0npw+NfolETOoN2Psbma60g6laQGXpNsRHUs=
-github.com/k2-fsa/sherpa-onnx-go v1.13.6/go.mod h1:KBDGSAIEljGnYGKZdE+BAuMJqfEMpY53SeiD8N++M48=
-github.com/k2-fsa/sherpa-onnx-go-linux v1.13.6 h1:CupI5dGvUgjGueu2Ju701qSAnn1+i+F0zkzGA74lttM=
-github.com/k2-fsa/sherpa-onnx-go-linux v1.13.6/go.mod h1:NXEH2rsBgTdqY59YpPq6CtSBlBAXy/8a9FmpLERU97I=
-github.com/k2-fsa/sherpa-onnx-go-macos v1.13.6 h1:RomjkUOYDsYawgRDSbf0TsK7IKApQqfrsnXAJUe5omw=
-github.com/k2-fsa/sherpa-onnx-go-macos v1.13.6/go.mod h1:ZOhUAXC62Unj0ZNfu6zxSFKcW96aXf7P3BsqiUyOBbE=
-github.com/k2-fsa/sherpa-onnx-go-windows v1.13.6 h1:iERze3L0ysXctzsn+p4Uhuj5NbqybKa78U5UTTxbs6g=
-github.com/k2-fsa/sherpa-onnx-go-windows v1.13.6/go.mod h1:5AX7TU8+P/gInjglY1ijtWUM2b8iyR0QX4yEngzMe64=
 github.com/kkdai/youtube/v2 v2.10.4 h1:T3VAQ65EB4eHptwcQIigpFvUJlV9EcKRGJJdSVUy3aU=
 github.com/kkdai/youtube/v2 v2.10.4/go.mod h1:pm4RuJ2tRIIaOvz4YMIpCY8Ls4Fm7IVtnZQyule61MU=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

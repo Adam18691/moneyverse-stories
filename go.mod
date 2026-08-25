@@ -4,7 +4,6 @@ go 1.23.0
 
 require (
 	github.com/disintegration/imaging v1.6.2
-	github.com/k2-fsa/sherpa-onnx-go v1.13.6
 	github.com/kkdai/youtube/v2 v2.10.4
 	github.com/sashabaranov/go-openai v1.17.9
 	golang.org/x/oauth2 v0.22.0
@@ -29,9 +28,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.4 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-linux v1.13.6 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-macos v1.13.6 // indirect
-	github.com/k2-fsa/sherpa-onnx-go-windows v1.13.6 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
