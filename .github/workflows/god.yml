@@ -10,23 +10,32 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
 
-      - name: Install Hidden Sulaiman Pro - Go Native - No FFmpeg
+      - name: Install Ultimate Hidden Pro - 8 Projects - No FFmpeg
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y blender gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gpac sox libopenal-dev
-          pip install opentimelineio piper-tts TTS edge-tts -q || true
-          # Sherpa-ONNX Go - Hidden
+          sudo apt-get install -y blender gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gpac sox libopenal-dev libopenimageio-dev
+          # Bento4 - Dolby - fragmented MP4
+          wget -q https://www.bok.net/Bento4/bin/1-6-0-641/Bento4-SDK-1-6-0-641.x86_64-unknown-linux.zip
+          unzip -q Bento4-*.zip || true
+          sudo cp Bento4-*/bin/* /usr/local/bin/ || true
+          # SVT-AV1 - Intel Netflix Meta
+          sudo apt-get install -y nasm
+          git clone https://gitlab.com/AOMediaCodec/SVT-AV1.git
+          cd SVT-AV1 && cd Build && cmake.. -DCMAKE_BUILD_TYPE=Release && make -j4 && sudo make install; cd../..
+          # Sherpa-ONNX - k2-fsa US Army
           wget -q https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.11/sherpa-onnx-v1.10.11-linux-x86_64-shared.tar.bz2
           tar -xjf sherpa-onnx-*.tar.bz2
           sudo cp sherpa-onnx-*/lib/* /usr/local/lib/ -v
           sudo ldconfig
-          # Shaka - Google
+          # Shaka Packager - Google Netflix
           wget -q https://github.com/shaka-project/shaka-packager/releases/download/v3.3.0/packager-linux-x64 -O packager
-          chmod +x packager
-          sudo mv packager /usr/local/bin/shaka-packager || true
-          # MistServer - Holland - 1000 TV channels
-          wget -q https://releases.mistserver.org/is/2024-01-12/MistServer_64bit.tar.gz
-          tar -xzf MistServer_*.tar.gz || true
+          chmod +x packager; sudo mv packager /usr/local/bin/shaka-packager || true
+          # MediaMTX - Italy
+          wget -q https://github.com/bluenviron/mediamtx/releases/download/v1.8.0/mediamtx_v1.8.0_linux_amd64.tar.gz
+          tar -xzf mediamtx_*.tar.gz || true
+          # OvenMediaEngine - Korea
+          docker pull airensoft/ovenmediaengine:latest || true
+          pip install opentimelineio piper-tts edge-tts TTS -q || true
           go mod tidy
           rm -f ai_router.go security.go
           mkdir -p frames
@@ -36,7 +45,7 @@ jobs:
         continue-on-error: true
         env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
 
-      - name: 🔥 Run Hidden Sulaiman Go
+      - name: 🔥 Run Ultimate Hidden Sulaiman Go
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
