@@ -1,72 +1,94 @@
 package trends
 
 import (
+	"encoding/xml"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 )
 
-// TrendWindow: أفضل وقت نشر لكل منطقة زمنية
-// القاعدة: انشر قبل ذروة مشاهدة المنطقة المستهدفة بـ 1-2 ساعة
 type TrendWindow struct {
-	Region    string
-	BestHourUTC int // ساعة UTC للنشر
-	Audience  string
+	Region      string
+	BestHourUTC int
+	Audience    string
 }
 
-// GlobalTrendWindows: مواعيد الذروة العالمية للنيتش المالي
 var GlobalTrendWindows = []TrendWindow{
-	{"🇸🇦 الخليج", 3, "ذروة بعد العشاء 9-11 مساءً"},       // UTC 18-21 → نشر UTC 17
-	{"🇪🇬 مصر والمغرب", 20, "ذروة 8-11 مساءً"},
-	{"🇹🇷 تركيا", 17, "ذروة بعد العشاء"},
-	{"🇺🇸 أمريكا", 22, "ذروة 12-2 ظهراً + 7-10 مساءً"}, // أعلى RPM عالمياً 💰
-	{"🇮🇳 الهند", 14, "ذروة 8-11 مساءً"},                // أكبر عدد مشاهدات
-	{"🇮🇩 إندونيسيا", 11, "ذروة 7-10 مساءً"},
+	{"🇺🇸 أمريكا", 22, "ذروة 12-2 ظهراً + 7-10 مساءً — أعلى RPM"},
+	{"🇸🇦 الخليج", 17, "ذروة بعد العشاء 9-11 مساءً"},
+	{"🇹🇷 تركيا", 16, "ذروة بعد العشاء"},
+	{"🇮🇳 الهند", 13, "ذروة 8-11 مساءً — أكبر جمهور"},
+	{"🇮🇩 إندونيسيا", 10, "ذروة 7-10 مساءً"},
 }
 
-// SeasonalTrends: مواسم الترند المالي العالمي 🔥
 type Seasonal struct {
-	Month     string
-	Event     string
-	Idea      string
-	Power     int // 1-10 قوة الترند
+	Month string
+	Event string
+	Idea  string
+	Power int
 }
 
 var SeasonalTrends = []Seasonal{
-	{"يناير", "قرارات العام الجديد New Year Resolutions", "قصص: كيف بدأت الثروات يوم 1 يناير؟", 10},
-	{"فبراير", "Tax Season أمريكا 🇺🇸", "قصص تهرب ضريبي أسقطت ملايينير", 7},
-	{"مارس", "رمضان — زكاة وصدقة وتجارة", "قصص تجارة الصحابة وزكاة المال", 10},
-	{"أبريل", "عيد الفطر + shopping season", "قصص تجار المواسم", 8},
+	{"يناير", "قرارات العام الجديد", "كيف بدأت الثروات يوم 1 يناير؟", 10},
+	{"فبراير", "Tax Season أمريكا", "قصص تهرب ضريبي أسقطت مليونيرات", 7},
+	{"مارس", "رمضان — زكاة وتجارة", "قصص تجارة الصحابة وزكاة المال", 10},
 	{"يونيو", "تخرج ووظائف جديدة", "من أول راتب إلى أول مليون", 7},
-	{"سبتمبر", "Back to Business — ربع أخير", "خطط الأثرياء للربع الأخير", 8},
-	{"نوفمبر", "Black Friday + Cyber Monday", "قصة اختراع Black Friday وأرباحه الخيالية", 10},
-	{"ديسمبر", "Budget Season + مراجعات العام", "أكبر صفقات أنهت العام بمليارات", 9},
+	{"سبتمبر", "Back to Business", "خطط الأثرياء للربع الأخير", 8},
+	{"نوفمبر", "Black Friday", "قصة اختراع Black Friday وأرباحه", 10},
+	{"ديسمبر", "مراجعات العام", "أكبر صفقات أنهت العام بمليارات", 9},
 }
 
-// DailyTrendHooks: ترندات يومية متجددة (تُحدَّث من Google Trends API مجاني)
-// https://trends.google.com/trending/rss?geo=US — بدون مفتاح API!
+// FetchDailyTrends: ترندات Google المجانية بدون API key
 func FetchDailyTrends(country string) ([]string, error) {
-	url := fmt.Sprintf(
-		"https://trends.google.com/trending/rss?geo=%s", country)
-	// parse XML → استخراج <title> لكل ترند
-	// ثم مطابقته مع بنك القصص المالي
-	return fetchAndMatch(url)
+	url := fmt.Sprintf("https://trends.google.com/trending/rss?geo=%s", country)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var feed struct {
+		Items []struct {
+			Title string `xml:"title"`
+		} `xml:"item"`
+	}
+	if err := xml.Unmarshal(body, &feed); err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, it := range feed.Items {
+		out = append(out, it.Title)
+	}
+	return out, nil
 }
 
-// MatchStoryToTrend: يربط الترند اليومي بقصة من بنكك
+// MatchStoryToTrend: يربط الترند بقصة مالية
 func MatchStoryToTrend(trend string) string {
 	matches := map[string]string{
-		"inflation":  "قصة الدولار الذي فقد نصف قيمته.. ومن ربح من الانهيار",
-		"crypto":     "قصة الشاب الذي راهن آخر 100$ على عملة رقمية",
-		"ai":         "قصة أول مليونير بالذكاء الاصطناعي",
-		"housing":    "قصة العقار: من مستأجر إلى مالك 50 عقاراً",
-		"stocks":     "قصة السهم الذي صعد 10000% في سنة",
+		"inflation": "قصة الدولار الذي فقد نصف قيمته.. ومن ربح من الانهيار",
+		"crypto":    "قصة الشاب الذي راهن آخر 100$ على عملة رقمية",
+		"ai":        "قصة أول مليونير بالذكاء الاصطناعي",
+		"housing":   "قصة العقار: من مستأجر إلى مالك 50 عقاراً",
+		"stocks":    "قصة السهم الذي صعد 10000% في سنة",
+		"bank":      "قصة البنك الذي انهار.. ومن توقّع الأمر قبل الجميع",
+		"economy":   "قصة اقتصاد انهار ونهض بقرار واحد",
+		"money":     "قصة الرجل الذي ضاعف ثروته في أزمة الجميع",
 	}
-	for key, story := range matches {
-		if contains(trend, key) { return story }
+	low := strings.ToLower(trend)
+	for k, story := range matches {
+		if strings.Contains(low, k) {
+			return story
+		}
 	}
-	return "" // لا تطابق → استخدم قصة دائمة من البنك
+	return ""
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && strings.Contains(strings.ToLower(s), sub)
-}
+var _ = time.Now
