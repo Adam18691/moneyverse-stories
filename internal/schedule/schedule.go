@@ -5,37 +5,31 @@ import (
 	"time"
 )
 
-// Region: منطقة نشر مع وقت الذروة
 type Region struct {
-	Name       string        // 🇸🇦 الخليج
-	PeakHourUTC int          // ساعة الذروة UTC
-	RPM        float64       // قيمة RPM التقديرية
-	FlagEmoji  string
+	Name        string
+	PeakHourUTC int
+	RPM         float64
+	FlagEmoji   string
 }
 
-// Regions: مرتبة حسب الأولوية (RPM × حجم الجمهور)
 var Regions = []Region{
-	{"أمريكا 🇺🇸", 22, 25.0, "🇺🇸"},   // أعلى RPM عالمياً 💰
+	{"أمريكا 🇺🇸", 22, 25.0, "🇺🇸"},
 	{"الخليج 🇸🇦", 17, 8.0, "🇸🇦"},
 	{"تركيا 🇹🇷", 16, 4.0, "🇹🇷"},
-	{"الهند 🇮🇳", 13, 2.0, "🇮🇳"},     // أكبر جمهور
+	{"الهند 🇮🇳", 13, 2.0, "🇮🇳"},
 	{"إندونيسيا 🇮🇩", 10, 1.5, "🇮🇩"},
 }
 
-// NextPublishTime: يحسب أقرب موعد ذروة قادم لأي منطقة
 func NextPublishTime(r Region, from time.Time) time.Time {
 	target := time.Date(from.Year(), from.Month(), from.Day(),
-		r.PeakHourUTC-2, 0, 0, 0, time.UTC) // نشر قبل الذروة بساعتين (معالجة + ترند)
+		r.PeakHourUTC-2, 0, 0, 0, time.UTC)
 	if !target.After(from) {
-		target = target.Add(24 * time.Hour) // ذروة اليوم انتهت → الغد
+		target = target.Add(24 * time.Hour)
 	}
 	return target
 }
 
-// PlanDay: يوزع الفيديوهات الأربعة على أفضل 4 نوافذ يومية
-//
-// الاستراتيجية: كل فيديو لنافذة مختلفة = تغطية 24 ساعة
-// الفيديو الأفضل جودة (hook الأقوى) يروح لأعلى RPM 🇺🇸
+// PlanDay: يوزع الفيديوهات على أفضل النوافذ (كل منطقة مرة)
 func PlanDay(videoIDs []int, now time.Time) map[int]time.Time {
 	plan := map[int]time.Time{}
 	used := map[string]bool{}
@@ -56,5 +50,4 @@ func PlanDay(videoIDs []int, now time.Time) map[int]time.Time {
 	return plan
 }
 
-// FormatRFC3339: الصيغة المطلوبة من YouTube API
 func FormatRFC3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
