@@ -1,14 +1,18 @@
-# TAYYIBAT MEGA V14 - GOD Go v29 FINAL - Go 100% PURE - 4K 60fps
+# 💰 MoneyVerse Stories Engine
 
-مشروع Go 100% - بدون R نهائي
-🚀 اسرع 10x - من 7m12s الى 45s
-📁 اسم الفولدر: output/tayyibat_v29_FINAL_GO_4K_ZW_Q4_60fps/
+> مصنع فيديوهات قصص المال والأعمال بالذكاء الاصطناعي — Go 100% PURE
 
-Q4 دول ذروة - ZW بدل SA:
-- EG 21:00
-- ZW 20:00 Harare - جديدة
-- AE 21:00
-- US 19:00
+![Go](https://img.shields.io/badge/Go-1.22-00ADD8) 
+![Status](https://img.shields.io/badge/videos-4%2Fday-gold)
 
-تشغيل: go run main.go
-Go 100% PURE - GOD EDITION
+## ✨ المميزات
+- 🔥 4 فيديوهات يومياً تلقائياً (GitHub Actions Cron)
+- 🌍 دبلجة وترجمة لـ 10+ لغات (Piper TTS مفتوح المصدر)
+- 🖼️ ثامبنيل سينمائي CTR عالي (ImageMagick)
+- 📤 رفع حقيقي على يوتيوب Public + Chapters + Tags
+- ♾️ توليد برومبتات لا نهائي (ملايين التركيبات)
+- ⚡ GStreamer + MLT — بدون FFmpeg
+
+## 🚀 التشغيل
+```bash
+go mod tidy && go run main.go
