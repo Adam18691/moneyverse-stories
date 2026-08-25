@@ -1,39 +1,61 @@
 name: Tayyibat Secure Ultimate Go
-on: {workflow_dispatch:}
+
+on:
+  workflow_dispatch:
+
 jobs:
-  god:
+  build-and-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
-      - uses: actions/setup-go@v5
-        with: {go-version: '1.22'}
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: 1. Gitleaks
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 1. Gitleaks - فحص التسريب
         uses: gitleaks/gitleaks-action@v2
-        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 2. Semgrep
+      - name: 2. Semgrep - فحص الثغرات
         uses: semgrep/semgrep-action@v1
 
-      - name: 3. Trivy Containers
+      - name: 3. Trivy - فحص الـ containers
         uses: aquasecurity/trivy-action@master
-        with: {scan-type: 'fs', scan-ref: '.'}
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
 
-      - name: Install
+      - name: Install Tools
         run: |
-          pip install edge-tts TTS yt-dlp -q || true
+          pip install edge-tts yt-dlp -q
+          sudo apt-get update -q
           sudo apt-get install ffmpeg -y -q
           go mod tidy
-          go vet./...
 
-      - name: Run Secure Go
+      - name: Go Vet - فحص اخطاء Go
+        run: go vet./...
+
+      - name: 🔥 Run - تشغيل المشروع
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           SOURCE_YT_URL: ${{ secrets.SOURCE_YT_URL }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-        run: go run.
+          PORT: 8787
+        run: |
+          echo "🚀 Starting Tayyibat Go..."
+          go run main.go security.go
