@@ -1,17 +1,38 @@
-name: Tayyibat God
-on: workflow_dispatch
+name: Tayyibat Secure Ultimate Go
+on: {workflow_dispatch:}
 jobs:
-  build:
+  god:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
       - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-      - run: go mod tidy
-      - name: Run
+        with: {go-version: '1.22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+
+      - name: 1. Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}}
+
+      - name: 2. Semgrep
+        uses: semgrep/semgrep-action@v1
+
+      - name: 3. Trivy Containers
+        uses: aquasecurity/trivy-action@master
+        with: {scan-type: 'fs', scan-ref: '.'}
+
+      - name: Install
+        run: |
+          pip install edge-tts TTS yt-dlp -q || true
+          sudo apt-get install ffmpeg -y -q
+          go mod tidy
+          go vet./...
+
+      - name: Run Secure Go
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SOURCE_YT_URL: ${{ secrets.SOURCE_YT_URL }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
