@@ -1,0 +1,35 @@
+name: ⏰ Scheduled Publisher
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # كل ساعتين — يغطي كل نوافذ الذروة
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Write YouTube Credentials
+        run: echo '${{ secrets.YOUTUBE_CREDENTIALS }}' > credentials/client_secret.json
+
+      - run: go mod tidy
+
+      - name: 📤 Check & Publish Due Videos
+        run: go run publish.go
+
+      - name: 💾 Save State Back
+        if: always()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "⏰ publisher state update [skip ci]"
+          file_pattern: schedule/pending.json
