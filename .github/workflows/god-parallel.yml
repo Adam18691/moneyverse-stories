@@ -1,38 +1,46 @@
-name: ⏰ Scheduled Publisher
+name: 💰 GOD Money Stories Engine
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   # كل ساعتين — يغطي كل نوافذ الذروة
+    - cron: '0 6 * * *'   # يومياً 06:00 UTC = 4 فيديوهات كل يوم ⏰
+  push:
   workflow_dispatch:
 
-permissions:
-  contents: write            # ضروري للـ commit التلقائي
-
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.22' }
 
-      - name: Restore Schedule State
-        uses: actions/cache@v4
+      - uses: actions/setup-go@v5
         with:
-          path: schedule/pending.json
-          key: pending-${{ github.run_id }}
-          restore-keys: pending-
+          go-version: '1.22'
+
+      - name: Install Engine Stack (بدون FFmpeg)
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            gstreamer1.0-tools gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav \
+            melt imagemagick piper espeak-ng
+
+      - name: Write YouTube Credentials
+        run: echo '${{ secrets.YOUTUBE_CREDENTIALS }}' > credentials/client_secret.json
 
       - run: go mod tidy
-      - name: 📤 Check & Publish Due Videos
-        run: go run publish.go
-        env:
-          YOUTUBE_CREDENTIALS: ${{ secrets.YOUTUBE_CREDENTIALS }}
 
-      - name: 💾 Save State Back
+      - name: 🚀 Build + Upload 4 Videos Parallel
+        run: go run main.go
+
+      - name: 💾 Commit Publish Schedule State
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "⏰ update publish schedule state [skip ci]"
+          commit_message: "⏰ update pending schedule [skip ci]"
           file_pattern: schedule/pending.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: money-stories-day-${{ github.run_number }}
+          path: output/*.mp4
+          retention-days: 5
