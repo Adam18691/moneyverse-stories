@@ -14,33 +14,27 @@ jobs:
       - name: Install FFmpeg and Melt - Cinematic Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg mlt melt fonts-noto-color-emoji fonts-dejavu-core
+          sudo apt-get install -y ffmpeg melt
           ffmpeg -version
           melt --version
-          echo "✅ FFmpeg + Melt installed"
 
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.22'
 
-      - name: Run GOD v44 - 15 MIN + 7 SEC HOOK + 10 HIDDEN ANGLES
+      - name: Run GOD v44
         run: |
           go mod tidy
           go run main.go
-          echo "=== FILES CREATED ==="
-          ls -lh
-          ls -lh *.mp4 || echo "No mp4 yet"
-          ls -lh *.wav || echo "No wav yet"
+          ls -lh *.mp4
+          ls -lh *.wav
 
       - name: Upload - 4 Videos 15 Min Cinematic
         uses: actions/upload-artifact@v4
         with:
-          name: TAYYIBAT-4-VIDEOS-15MIN-CINEMATIC-PRO
+          name: TAYYIBAT-15MIN-4VIDEOS
           path: |
             FINAL*.mp4
             *.mp4
-            *.wav
-            *.txt
-          if-no-files-found: warn
-          retention-days: 7
+          if-no-files-found: error
