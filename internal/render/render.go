@@ -13,7 +13,7 @@ func Build(scriptKey, audioTrack, outPath string) error {
 	h.Write([]byte(scriptKey))
 
 	cmd := exec.Command("gst-launch-1.0", "-e",
-		"multifilesrc", fmt.Sprintf("location=scenes/%d_%%03d.png", h.Sum32n(10000)),
+		"multifilesrc", fmt.Sprintf("location=scenes/%d_%%03d.png", h.Sum32()%10000),
 		"!", "image/png", "width=1920,height=1080", "framerate=2/1",
 		"!", "videoconvert", "!", "videoscale",
 		"!", "x264enc", "speed-preset=ultrafast", "quantizer=28", "threads=0",
