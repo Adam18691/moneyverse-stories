@@ -23,12 +23,12 @@ type Meta struct {
 	PublishAt   *time.Time        `json:"publish_at"`
 }
 
-// ---------- getClient ----------
+// ---------- getClient: refresh token فقط، بدون متصفح ----------
 func getClient() (*oauth2.Config, *oauth2.Token, error) {
 	read := func(f string) (string, error) {
 		b, err := os.ReadFile(f)
 		if err != nil {
-			return "", fmt.Errorf("اقرأ %s: %w", f, err)
+			return "", fmt.Errorf("read %s: %w", f, err)
 		}
 		return strings.TrimSpace(string(b)), nil
 	}
@@ -43,7 +43,7 @@ func getClient() (*oauth2.Config, *oauth2.Token, error) {
 	}
 	refreshToken, err := read("credentials/refresh_token.txt")
 	if err != nil {
-		return, nil, err
+		return nil, nil, err
 	}
 
 	cfg := &oauth2.Config{
@@ -53,14 +53,14 @@ func getClient() (*oauth2.Config, *oauth2.Token, error) {
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
-	RedirectURL: "https://developers.google.com/oauthplayground",
+		RedirectURL: "https://developers.google.com/oauthplayground",
 		Scopes:      []string{"https://www.googleapis.com/auth/youtube.upload"},
 	}
 
 	tok := &oauth2.Token{RefreshToken: refreshToken}
 	tok, err = cfg.TokenSource(context.Background(), tok).Token()
 	if err != nil {
-		return nil, nil, fmt.Errorf("فشل تجديد التوكن: %w", err)
+		return nil, nil, fmt.Errorf("refresh token failed: %w", err)
 	}
 	saveToken("credentials/token.json", tok)
 	return cfg, tok, nil
@@ -96,7 +96,7 @@ func Upload(videoPath string, m Meta) (string, error) {
 	}
 
 	call := srv.Videos.Insert([]string{"snippet", "status"}, upload)
-	f, err os.Open(videoPath)
+	f, err := os.Open(videoPath)
 	if err != nil {
 		return "", err
 	}
@@ -110,8 +110,9 @@ func Upload(videoPath string, m Meta) (string, error) {
 
 	// الصورة المصغرة
 	if m.ThumbPath != "" {
-		if tf, err := os.Open(m.ThumbPath); err == nil {
-			srv.Thumbnails.Set(resp.Id).Media(tf).Do()
+		tf, terr := os.Open(m.ThumbPath)
+		if terr == nil {
+			srv.Thumbnails.Set(id).Media(tf).Do()
 			tf.Close()
 			fmt.Printf("🖼️ THUMB SET: %s\n", m.ThumbPath)
 		}
@@ -119,28 +120,30 @@ func Upload(videoPath string, m Meta) (string, error) {
 
 	// ترجمات/دبلجة إضافية (map: lang → مسار)
 	for lang, path := range m.LangTracks {
-		if cf, err := os.Open(path); err == nil {
-			cap := &youtube.Caption{
-				Snippet: &youtube.CaptionSnippet{
-					VideoId: id, Language: lang, Name: "Dub", IsDraft: false,
-				},
-			}
-			srv.Captions.Insert([]string{"snippet"}, cap).Media(cf).Do()
-			cf.Close()
+		cf, cerr := os.Open(path)
+		if cerr != nil {
+			continue
 		}
+		cap := &youtube.Caption{
+			Snippet: &youtube.CaptionSnippet{
+				VideoId: id, Language: lang, Name: "Dub", IsDraft: false,
+			},
+		}
+		srv.Captions.Insert([]string{"snippet"}, cap).Media(cf).Do()
+		cf.Close()
 	}
 
 	if m.PublishAt != nil {
 		recordPending(PendingVideo{YouTubeID: id, Title: m.Title, PublishAt: *m.PublishAt})
-		fmt.Printf("⏰ SCHEDULED: https://youtu.bes — PUBLIC at %s UTC\n",
+		fmt.Printf("⏰ SCHEDULED: https://youtu.be/%s — PUBLIC at %s UTC\n",
 			id, m.PublishAt.UTC().Format("15:04"))
 	} else {
-		fmt.Printf("✅ UPLOADED PUBLIC:://youtu.be/%s\n", id)
+		fmt.Printf("✅ UPLOADED PUBLIC: https://youtu.be/%s\n", id)
 	}
 	return id, nil
 }
 
-// SetPublic: تحويل خاص إلى Public (يستدعيه publish-scheduler)
+// ---------- SetPublic: يستدعيه publish-scheduler ----------
 func SetPublic(videoID string) error {
 	srv, err := newService()
 	if err != nil {
@@ -150,7 +153,7 @@ func SetPublic(videoID string) error {
 		Id: videoID,
 		Status: &youtube.VideoStatus{
 			PrivacyStatus:           "public",
-			SelfDeclaredMadeFor: false,
+			SelfDeclaredMadeForKids: false,
 		},
 	}).Do()
 	return err
