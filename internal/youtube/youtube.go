@@ -4,109 +4,127 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 )
 
+// ---------- Meta ----------
 type Meta struct {
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Tags        []string          `json:"tags"`
-	LangTracks  map[string]string `json:"-"`
-	ThumbPath   string            `json:"-"`
-	PublishAt   *time.Time        `json:"publishAt,omitempty"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description"`
+	Tags         []string  `json:"tags"`
+	LangTracks   []struct {
+		Lang string `json:"lang"`
+		Path string `json:"path"`
+	} `json:"lang_tracks"`
+	PublishAt *time.Time `json:"publish_at"`
 }
 
-func getClient() (*http.Client, error) {
-	b, err := os.ReadFile("credentials/client_secret.json")
-	if err != nil {
-		return nil, err
+// ---------- getClient: بدون متصفح، refresh token فقط ----------
+func getClient() (*oauth2.Config, *oauth2.Token, error) {
+	read := func(f string) (string, error) {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return "", fmt.Errorf("اقرأ %s: %w", f, err)
+		}
+		return strings.TrimSpace(string(b)), nil
 	}
-	cfg, err := google.ConfigFromJSON(b,
-		youtube.YoutubeUploadScope, youtube.YoutubepartnerScope,
-		youtube.YoutubeScope)
+
+	clientID, err := read("credentials/client_id.txt")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	const tokFile = "token.json"
-	tok, err := tokenFromFile(tokFile)
+	clientSecret, err := read("credentials/client_secret.txt")
 	if err != nil {
-		tok = getTokenFromWeb(cfg)
-		saveToken(tokFile, tok)
+		return nil, nil, err
 	}
-	return cfg.Client(context.Background(), tok), nil
+	refreshToken, err := read("credentials/refresh_token.txt")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cfg := &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
+			TokenURL: "https://oauth2.googleapis.com/token",
+		},
+		RedirectURL: "https://developers.google.com/oauthplayground",
+		Scopes:      []string{"https://www.googleapis.com/auth/youtube.upload"},
+	}
+
+	tok := &oauth2.Token{RefreshToken: refreshToken}
+	tok, err = cfg.TokenSource(context.Background(), tok).Token()
+	if err != nil {
+		return nil, nil, fmt.Errorf("فشل تجديد التوكن: %w", err)
+	}
+	saveToken("credentials/token.json", tok)
+	return cfg, tok, nil
 }
 
-// Upload: رفع Public فوري أو Private مجدول بـ publishAt
+// ---------- Upload ----------
 func Upload(videoPath string, m Meta) (string, error) {
-	client, err := getClient()
+	cfg, tok, err := getClient()
 	if err != nil {
 		return "", err
 	}
+
+	client := cfg.Client(context.Background(), tok)
 	srv, err := youtube.NewService(context.Background(), option.WithHTTPClient(client))
 	if err != nil {
 		return "", err
 	}
 
-	status := &youtube.VideoStatus{SelfDeclaredMadeForKids: false}
-	if m.PublishAt != nil {
-		status.PrivacyStatus = "private"
-		status.PublishAt = m.PublishAt.UTC().Format(time.RFC3339)
-	} else {
-		status.PrivacyStatus = "public"
-	}
-
-	vid := &youtube.Video{
+	upload := &youtube.Video{
 		Snippet: &youtube.VideoSnippet{
-			Title: m.Title, Description: m.Description,
-			Tags: m.Tags, CategoryId: "27",
-			DefaultLanguage: "ar", DefaultAudioLanguage: "ar",
+			Title:       m.Title,
+			Description: m.Description,
+			Tags:        m.Tags,
+			CategoryId:  "27", // Education
 		},
-		Status: status,
+		Status: &youtube.VideoStatus{
+			PrivacyStatus:         "public",
+			SelfDeclaredMadeForKids: false,
+		},
 	}
 
-	file, err := os.Open(videoPath)
+	call := srv.Videos.Insert([]string{"snippet", "status"}, upload)
+	f, err := os.Open(videoPath)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer f.Close()
 
-	resp, err := srv.Videos.Insert([]string{"snippet", "status"}, vid).Media(file).Do()
+	resp, err := call.Media(f).Do()
 	if err != nil {
 		return "", err
 	}
 	id := resp.Id
 
-	// الثامبنيل
-	if th, err := os.Open(m.ThumbPath); err == nil {
-		srv.Thumbnails.Set(id).Media(th).Do()
-		th.Close()
-	}
-
-	// captions لكل لغة
-	for lang, path := range m.LangTracks {
-		f, err := os.Open(path)
+	// ترجمات/دبلجة إضافية
+	for _, lt := range m.LangTracks {
+		cf, err := os.Open(lt.Path)
 		if err != nil {
 			continue
 		}
 		cap := &youtube.Caption{
 			Snippet: &youtube.CaptionSnippet{
-				VideoId: id, Language: lang, Name: "AutoDub", IsDraft: false,
+				VideoId:  id, Language: lt.Lang, Name: "AutoDub", IsDraft: false,
 			},
 		}
-		srv.Captions.Insert([]string{"snippet"}, cap).Media(f).Do()
-		f.Close()
+		srv.Captions.Insert([]string{"snippet"}, cap).Media(cf).Do()
+		cf.Close()
 	}
 
 	if m.PublishAt != nil {
 		recordPending(PendingVideo{YouTubeID: id, Title: m.Title, PublishAt: *m.PublishAt})
-		fmt.Printf("⏰ SCHEDULED: https://youtu.be/%s → PUBLIC at %s UTC\n",
+		fmt.Printf("⏰ SCHEDULED: https://youtu.be/%s  —  PUBLIC at %s UTC\n",
 			id, m.PublishAt.UTC().Format("15:04"))
 	} else {
 		fmt.Printf("✅ UPLOADED PUBLIC: https://youtu.be/%s\n", id)
@@ -114,16 +132,19 @@ func Upload(videoPath string, m Meta) (string, error) {
 	return id, nil
 }
 
-// SetPublic: تحويل فيديو إلى Public (يستخدمه publish.go)
+// SetPublic: تحويل خاص إلى Public (يستدعيه publish.go)
 func SetPublic(videoID string) error {
-	client, err := getClient()
+	cfg, tok, err := getClient()
 	if err != nil {
 		return err
 	}
+
+	client := cfg.Client(context.Background(), tok)
 	srv, err := youtube.NewService(context.Background(), option.WithHTTPClient(client))
 	if err != nil {
 		return err
 	}
+
 	_, err = srv.Videos.Update([]string{"status"}, &youtube.Video{
 		Id: videoID,
 		Status: &youtube.VideoStatus{
@@ -145,40 +166,17 @@ type PendingVideo struct {
 const pendingFile = "schedule/pending.json"
 
 func recordPending(v PendingVideo) {
-	os.MkdirAll("schedule", 0755)
+	os.MkdirAll("schedule", 0o755)
 	list := []PendingVideo{}
 	if b, err := os.ReadFile(pendingFile); err == nil {
 		json.Unmarshal(b, &list)
 	}
 	list = append(list, v)
 	b, _ := json.MarshalIndent(list, "", "  ")
-	os.WriteFile(pendingFile, b, 0644)
-}
-
-// ---------- oauth helpers ----------
-func tokenFromFile(f string) (*oauth2.Token, error) {
-	b, err := os.ReadFile(f)
-	if err != nil {
-		return nil, err
-	}
-	tok := &oauth2.Token{}
-	return tok, json.Unmarshal(b, tok)
+	os.WriteFile(pendingFile, b, 0o644)
 }
 
 func saveToken(f string, tok *oauth2.Token) {
 	b, _ := json.MarshalIndent(tok, "", "  ")
-	os.WriteFile(f, b, 0600)
-}
-
-func getTokenFromWeb(cfg *oauth2.Config) *oauth2.Token {
-	fmt.Println("🔗 افتح هذا الرابط وامنح الإذن:")
-	fmt.Println(cfg.AuthCodeURL("state-token"))
-	fmt.Print("\nالصق الكود هنا: ")
-	var code string
-	fmt.Scan(&code)
-	tok, err := cfg.Exchange(context.Background(), code)
-	if err != nil {
-		panic(err)
-	}
-	return tok
+	os.WriteFile(f, b, 0o600)
 }
