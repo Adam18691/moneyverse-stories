@@ -15,17 +15,15 @@ import (
 
 // ---------- Meta ----------
 type Meta struct {
-	Title        string    `json:"title"`
-	Description  string    `json:"description"`
-	Tags         []string  `json:"tags"`
-	LangTracks   []struct {
-		Lang string `json:"lang"`
-		Path string `json:"path"`
-	} `json:"lang_tracks"`
-	PublishAt *time.Time `json:"publish_at"`
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	Tags        []string          `json:"tags"`
+	LangTracks  map[string]string `json:"lang_tracks"`
+	ThumbPath   string            `json:"thumb_path"`
+	PublishAt   *time.Time        `json:"publish_at"`
 }
 
-// ---------- getClient: بدون متصفح، refresh token فقط ----------
+// ---------- getClient ----------
 func getClient() (*oauth2.Config, *oauth2.Token, error) {
 	read := func(f string) (string, error) {
 		b, err := os.ReadFile(f)
@@ -45,7 +43,7 @@ func getClient() (*oauth2.Config, *oauth2.Token, error) {
 	}
 	refreshToken, err := read("credentials/refresh_token.txt")
 	if err != nil {
-		return nil, nil, err
+		return, nil, err
 	}
 
 	cfg := &oauth2.Config{
@@ -55,7 +53,7 @@ func getClient() (*oauth2.Config, *oauth2.Token, error) {
 			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
-		RedirectURL: "https://developers.google.com/oauthplayground",
+	RedirectURL: "https://developers.google.com/oauthplayground",
 		Scopes:      []string{"https://www.googleapis.com/auth/youtube.upload"},
 	}
 
@@ -68,15 +66,18 @@ func getClient() (*oauth2.Config, *oauth2.Token, error) {
 	return cfg, tok, nil
 }
 
-// ---------- Upload ----------
-func Upload(videoPath string, m Meta) (string, error) {
+func newService() (*youtube.Service, error) {
 	cfg, tok, err := getClient()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
 	client := cfg.Client(context.Background(), tok)
-	srv, err := youtube.NewService(context.Background(), option.WithHTTPClient(client))
+	return youtube.NewService(context.Background(), option.WithHTTPClient(client))
+}
+
+// ---------- Upload ----------
+func Upload(videoPath string, m Meta) (string, error) {
+	srv, err := newService()
 	if err != nil {
 		return "", err
 	}
@@ -86,16 +87,16 @@ func Upload(videoPath string, m Meta) (string, error) {
 			Title:       m.Title,
 			Description: m.Description,
 			Tags:        m.Tags,
-			CategoryId:  "27", // Education
+			CategoryId:  "27",
 		},
 		Status: &youtube.VideoStatus{
-			PrivacyStatus:         "public",
+			PrivacyStatus:           "public",
 			SelfDeclaredMadeForKids: false,
 		},
 	}
 
 	call := srv.Videos.Insert([]string{"snippet", "status"}, upload)
-	f, err := os.Open(videoPath)
+	f, err os.Open(videoPath)
 	if err != nil {
 		return "", err
 	}
@@ -107,49 +108,49 @@ func Upload(videoPath string, m Meta) (string, error) {
 	}
 	id := resp.Id
 
-	// ترجمات/دبلجة إضافية
-	for _, lt := range m.LangTracks {
-		cf, err := os.Open(lt.Path)
-		if err != nil {
-			continue
+	// الصورة المصغرة
+	if m.ThumbPath != "" {
+		if tf, err := os.Open(m.ThumbPath); err == nil {
+			srv.Thumbnails.Set(resp.Id).Media(tf).Do()
+			tf.Close()
+			fmt.Printf("🖼️ THUMB SET: %s\n", m.ThumbPath)
 		}
-		cap := &youtube.Caption{
-			Snippet: &youtube.CaptionSnippet{
-				VideoId:  id, Language: lt.Lang, Name: "AutoDub", IsDraft: false,
-			},
+	}
+
+	// ترجمات/دبلجة إضافية (map: lang → مسار)
+	for lang, path := range m.LangTracks {
+		if cf, err := os.Open(path); err == nil {
+			cap := &youtube.Caption{
+				Snippet: &youtube.CaptionSnippet{
+					VideoId: id, Language: lang, Name: "Dub", IsDraft: false,
+				},
+			}
+			srv.Captions.Insert([]string{"snippet"}, cap).Media(cf).Do()
+			cf.Close()
 		}
-		srv.Captions.Insert([]string{"snippet"}, cap).Media(cf).Do()
-		cf.Close()
 	}
 
 	if m.PublishAt != nil {
 		recordPending(PendingVideo{YouTubeID: id, Title: m.Title, PublishAt: *m.PublishAt})
-		fmt.Printf("⏰ SCHEDULED: https://youtu.be/%s  —  PUBLIC at %s UTC\n",
+		fmt.Printf("⏰ SCHEDULED: https://youtu.bes — PUBLIC at %s UTC\n",
 			id, m.PublishAt.UTC().Format("15:04"))
 	} else {
-		fmt.Printf("✅ UPLOADED PUBLIC: https://youtu.be/%s\n", id)
+		fmt.Printf("✅ UPLOADED PUBLIC:://youtu.be/%s\n", id)
 	}
 	return id, nil
 }
 
-// SetPublic: تحويل خاص إلى Public (يستدعيه publish.go)
+// SetPublic: تحويل خاص إلى Public (يستدعيه publish-scheduler)
 func SetPublic(videoID string) error {
-	cfg, tok, err := getClient()
+	srv, err := newService()
 	if err != nil {
 		return err
 	}
-
-	client := cfg.Client(context.Background(), tok)
-	srv, err := youtube.NewService(context.Background(), option.WithHTTPClient(client))
-	if err != nil {
-		return err
-	}
-
 	_, err = srv.Videos.Update([]string{"status"}, &youtube.Video{
 		Id: videoID,
 		Status: &youtube.VideoStatus{
 			PrivacyStatus:           "public",
-			SelfDeclaredMadeForKids: false,
+			SelfDeclaredMadeFor: false,
 		},
 	}).Do()
 	return err
