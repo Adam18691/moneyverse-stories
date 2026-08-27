@@ -1,85 +1,69 @@
-name: 💰 GOD Money Stories Engine
+name: 🔥 GOD Parallel Engine
 
 on:
   workflow_dispatch:
     inputs:
       videos:
-        description: 'عدد الفيديوهات (0=parallel)'
+        description: 'عدد الفيديوهات (0 = تلقائي حسب الحصة)'
         required: false
-        default: '4'
+        default: '0'
   schedule:
-    - cron: '0 */6 * * *'   # كل 6 ساعات تلقائيًا
-  push:
-    branches: [ main ]
-    paths:
-      -.go'
-      - '.github/workflows/god-parallel.yml'
+    - cron: '0 6,14,20 * * *'
 
 permissions:
   contents: write
 
 jobs:
-  god-engine:
+  god-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-
+    timeout-minutes: 60
     steps:
-      # ================= المستودع + Go =================
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          cache: false
 
-      # ================= محرك الرندر السينمائي =================
-      - name: Install Engine Stack
+      - name: 🧰 Install Tools (ffmpeg + edge-tts)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            melt \
-            gstreamer1.0-tools \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-ugly \
-            gstreamer1.0-libav \
-            imagemagick \
-            fonts-dejavu-core \
-            p7zip-full
-          pip install --quiet edge-tts
-          echo "=== ENGINE READY ==="
-          which melt && melt -version | head -2 || true
-          which gst-launch-1.0 || true
-          which convert || true
-          which edge-tts || true
+          sudo apt-get install -y -qq ffmpeg
+          pip install edge-tts --quiet
+          which ffmpeg
+          which edge-tts
 
-      # ================= الأسرار → ملفات =================
-      - name: Write Credentials
-        env:
-          CLIENT_ID:       ${{ secrets.YT_CLIENT_ID }}
-          CLIENT_SECRET:   ${{ secrets.YT_CLIENT_SECRET }}
-          REFRESH_TOKEN:   ${{ secrets.YT_REFRESH_TOKEN }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          PEXELS_API_KEY:  ${{ secrets.PEXELS_API_KEY }}
+      - name: 🔑 Write Credentials
         run: |
-          mkdir -p credentials secrets output audio thumbs scenes music_cache schedule
-
-          echo "$CLIENT_ID"     > credentials/client_id.txt
-          echo "$CLIENT_SECRET" > credentials/client_secret.txt
-          echo "$REFRESH_TOKEN" > credentials/refresh_token.txt
-          chmod 600 credentials/*.txt
-
-          [ -n "PIXABAY_API_KEY" ] && echo "PIXABAY_API_KEY" > secrets/pixabay_key.txt
-          [ -n "PEXELS_API_KEY"  ] && echo "PEXELS_API_KEY"  > secrets/pexels_key.txt
-
+          mkdir -p credentials secrets
+          [ -n "PEXELS_API_KEY" ] && echo "PEXELS_API_KEY=$PEXELS_API_KEY" >> credentials/env
           echo "✅ Credentials written:"
           ls -la credentials/
           ls -la secrets/
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
-      # ================= البناء والتحقق من الترجمة =================
+      # ============================================================
+      # 🔊 الصوت — تثبيت Piper + الصوت العربي (جديد!)
+      # ============================================================
+      - name: 🎙️ Install Piper TTS
+        run: |
+          cd $HOME
+          curl -sL "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" -o piper.tar.gz
+          tar xzf piper.tar.gz
+          sudo cp piper/piper /usr/local/bin/
+          echo "✅ piper installed"
+
+      - name: 🎙️ Download Arabic Voice
+        run: |
+          mkdir -p models
+          BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx"
+          curl -sL "$BASE" -o models/ar_JO-kareem-medium.onnx
+          curl -sL "$BASE.json" -o models/ar_JO-kareem-medium.onnx.json
+          ls -la models/
+
+      # ============================================================
+      # البناء والتحقق من الترجمة
+      # ============================================================
       - name: Build Engine
         run: |
           go mod tidy
@@ -87,7 +71,9 @@ jobs:
           go build -o god-engine .
           echo "✅ BUILD OK"
 
-      # ================= الإنتاج الكامل =================
+      # ============================================================
+      # الإنتاج الكامل
+      # ============================================================
       - name: 🔥 GOD Production Run
         run: |
           ./god-engine
@@ -95,25 +81,22 @@ jobs:
           VIDEOS_COUNT: ${{ github.event.inputs.videos }}
           CGO_ENABLED: '0'
 
-      # ================= أرشفة النتائج (حتى لو فشل جزئيًا) =================
-      - name: Archive Videos
+      # ============================================================
+      # أرشفة النتائج (حتى لو فشل جزئياً)
+      # ============================================================
+      - name: 📦 Archive Videos
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: money-videos-${{ github.run_number }}
+          name: videos-${{ github.run_number }}
           path: |
             output/*.mp4
-            thumbs/*.jpg
-            schedule/pending.json
-          retention-days: 3
-          if-no-files-found: warn
+            thumbnails/*.jpg
+          if-no-files-found: ignore
 
-      # ================= سجل النجاح في المستودع =================
-      - name: Save State
-        if: success()
-        run: |
-          git config user.name  "god-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add schedule/ 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "📊 production state run#${{ github.run_number }}"
-          git push || true
+      - name: 💾 Save State Back
+        if: always()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🔥 god-engine state update [skip ci]"
+          file_pattern: "schedule/*.json data/*.json"
