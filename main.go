@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 
+	"moneyverse-stories/internal/render"
 	"moneyverse-stories/internal/thumbs"
 	"moneyverse-stories/internal/trends"
 	"moneyverse-stories/internal/tts"
@@ -16,32 +16,47 @@ import (
 
 // ============================================================
 //  💰 GOD Money Stories Engine
-//  خط إنتاج سينمائي كامل: فيديو نخبة + صوت عصبي + ثامبنيل 4K + نشر تلقائي
+//  خط إنتاج سينمائي كامل:
+//  نخبة مقاطع → صوت عصبي نخبوي → رندر سينمائي 15/30 دقيقة
+//  → ثامبنيل 4K ذهبي → نشر تلقائي Public على يوتيوب
 // ============================================================
 
-// Hook قصص جذابة — الخطاف الأول يحدد نجاح الفيديو
+// Hook الخطاف الافتتاحي — يحدد نجاح الفيديو
 type Hook struct {
 	VoiceLine string `json:"voice_line"`
 	Title     string `json:"title"`
 }
 
 var hooks = []Hook{
-	{VoiceLine: "توقف! قبل أن تكمل، خذ هذه المعاينة وعد أحدهم أنك رأيت المستقبل اليوم.", Title: "يقولون إنها حكاية تخييلية... إلا أنها تحدث الآن"},
-	{VoiceLine: "لو أعطيك مفتاحًا واحدًا ليفهم الثريون ثرواتهم، أهتم؟ هذا هو.", Title: "المفتاح المخفي الذي لا يعرفه إلا الأثرياء"},
-	{VoiceLine: "عام 2008 أسقط التاجر مباني كاملة... وقف عليها شخص ما وهو حائز بذهب بناعم...", Title: "من احتكار إلى ملكية"},
+	{
+		VoiceLine: "توقف! قبل أن تكمل، خذ هذه المعاينة، وعد أحدهم أنك رأيت المستقبل اليوم.",
+		Title:     "يقولون إنها حكاية تخييلية... إلا أنها تحدث الآن",
+	},
+	{
+		VoiceLine: "لو أعطيتك مفتاحًا واحدًا ليفهم الأثرياء ثرواتهم، هل تهتم؟ هذا هو.",
+		Title:     "المفتاح المخفي الذي لا يعرفه إلا الأثرياء",
+	},
+	{
+		VoiceLine: "في عام 2008 انهارت أسواق المال... لكن شخصًا واحدًا وقف في الاتجاه المعاكس وربح المليارات.",
+		Title:     "من الاحتكار إلى الملكية",
+	},
+	{
+		VoiceLine: "هذه ليست قصة عن الحظ... هذه قصة عن قرار واحد غيّر كل شيء.",
+		Title:     "قرار واحد... وحياة بأكملها تغيرت",
+	},
 }
 
-// VideoMeta تفاصيل الرفع لليوتيوب
+// buildMeta تفاصيل الرفع لليوتيوب — عناوين وأوصاف محسّنة للنيتش
 func buildMeta(id int, h Hook) youtube.Meta {
-	title := fmt.Sprintf("%s 💰| قصص وأسرار المال #.%d", h.Title, id+1)
+	title := fmt.Sprintf("%s 💰 | قصص وأسرار المال #%d", h.Title, id+1)
 
 	desc := fmt.Sprintf(`%s
 
 🎬 قصة سينمائية عن المال والنجاح بلغة يفهمها الجميع.
-🔔 اشترك وفعّل الجرس لتصلك الحكاية الجديدة كل يوم.
-💬 اكتب لي في التعليقات: ما أكثر سرٍّ أدهشك؟
+🔔 اشترك وفعّل الجرس لتصلك الحكاية الجديدة يوميًا.
+💬 اكتب في التعليقات: ما أكثر سرٍّ أدهشك في هذه القصة؟
 
-#قصص_مال #ثروة #تنمية_ذاتية #أسرار_النجاح`, h.Title)
+#قصص_مال #ثروة #تنمية_ذاتية #أسرار_النجاح #قصص_واقعية`, h.Title)
 
 	return youtube.Meta{
 		Title:       title,
@@ -61,40 +76,48 @@ func produceVideo(id int) error {
 	story := buildStoryText(id, h)
 
 	// ============ 1) المقاطع السينمائية النخبوية ============
-	queries := cinematicQueries(id)
-	elite := trends.FetchBestCinematic(queries, 10)
+	fmt.Printf("🔍 VIDEO %d: fetching elite cinematic clips...\n", id)
+	elite := trends.FetchBestCinematic(cinematicQueries(id), 10)
+
 	var clipPaths []string
 	for _, c := range elite {
 		if p, err := trends.Download(c, "scenes"); err == nil {
 			clipPaths = append(clipPaths, p)
 		}
 	}
-	fmt.Printf("🎞️ VIDEO %d: %d elite clips\n", id, len(clipPaths))
+	if len(clipPaths) == 0 {
+		return fmt.Errorf("video %d: no elite clips available", id)
+	}
+	fmt.Printf("🎞️ VIDEO %d: %d elite clips ready\n", id, len(clipPaths))
 
-	// ============ 2) الصوت — مذيع عصبي نخبوي ============
+	// ============ 2) الصوت — مذيع عصبي نخبوي (Edge Neural) ============
 	os.MkdirAll("audio", 0o755)
 	vo := filepath.Join("audio", fmt.Sprintf("%d_ar.wav", id))
 	if err := tts.SmartSpeak(id, h.VoiceLine+" "+story, vo); err != nil {
 		fmt.Printf("⚠️ VOICE %d failed: %v\n", id, err)
-		return err
+		return fmt.Errorf("voice %d: %w", id, err)
 	}
+	fmt.Printf("🎙️ VIDEO %d: voice ready\n", id)
 
-	// ============ 3) الرندر السينمائي (مقدمة 7 ثوانٍ + 15/30 دقيقة) ============
+	// ============ 3) الرندر السينمائي (مقدمة 7 ثوانٍ + جسم 15/30 دقيقة) ============
 	out := filepath.Join("output", fmt.Sprintf("money_%d.mp4", id))
-	if err := renderStory(out, id); err != nil {
+	if err := render.BuildStory(out, id); err != nil {
 		return fmt.Errorf("render %d: %w", id, err)
 	}
+	fmt.Printf("🎬 VIDEO %d: render done → %s\n", id, out)
 
-	// ============ 4) الثامبنيل — صور 4K دراماتيكية + نص ذهبي ============
-	err := thumbs.Generate(id, shortTitle(h.Title), "fallback")
+	// ============ 4) الثامبنيل — صور 4K دراماتيكية + نص ذهبي ثلاثي الأبعاد ============
+	err := thumbs.Generate(id, shortTitle(h.Title), "")
 	if err != nil {
-		fmt.Printf("⚠️ THUMB %d failed: %v\n", id, err)
+		fmt.Printf("⚠️ THUMB %d failed (continuing): %v\n", id, err)
 	} else {
-		fmt.Printf("🖼️ THUMB %d DONE\n", id)
+		fmt.Printf("🖼️ VIDEO %d: thumb done\n", id)
 	}
 
-	// ============ 5) الرفع لليوتيوب ============
+	// ============ 5) الرفع لليوتيوب — Public مباشرة ============
 	meta := buildMeta(id, h)
+	meta.ThumbPath = filepath.Join("thumbs", fmt.Sprintf("thumb_%d.jpg", id))
+
 	vidID, err := youtube.Upload(out, meta)
 	if err != nil {
 		return fmt.Errorf("upload %d: %w", id, err)
@@ -104,43 +127,38 @@ func produceVideo(id int) error {
 	return nil
 }
 
-// renderStory يشغل محرك الرندر (buildMain عبر melt داخل scripts أو يستدعي الحزمة)
-func renderStory(out string, id int) error {
-	// إن كانت render.BuildStory متاحة كمكتبة فهذا يكفي؛
-	// هنا نستدعيها عبر binary الفرعي للأمان (بنية CLI موجودة لديك)
-	cmd := exec.Command("./god-engine-sub", "story", out,
-		fmt.Sprintf("--id=%d", id))
-	// fallback داخلي إن لم وُجد binary:
-	if _, err := os.Stat("./god-engine-sub"); err != nil {
-		return renderInline(out, id)
-	}
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	return cmd.Run()
-}
-
-// buildStoryText نص القصة — يتوسع تلقائيًا حسب مدة مستهدفة
+// ============================================================
+//  نصوص القصص — توسّع تلقائيًا حسب مدة الفيديو المستهدفة
+// ============================================================
 func buildStoryText(id int, h Hook) string {
-	base := map[int]string{
-		0: `في مدينة لا تنام، كان هناك شاب يعدّ القطع النقدية كإشارة لحياة أخرى... فجأة جاء عرض غريب من مجهول: استخدم عنوانًا فقط.`,
-		1: `قال لي الجدّ: "النقود تبحث عن أولئك الذين يعرفون كيف تجري الأمور." ثم وضع في يدي عملة واحدة مؤرخة بعام صعب...`,
-		2: `بدأت الحكاية برقم قياسي خارج عن العدّ... ثم انكشف ذلك الفاحص الذكي الذي غيّر سماء المدينة بأكملها خلال ليلة.`,
+	base := []string{
+		`في مدينة لا تنام، كان هناك شاب يعدّ القطع النقدية على مكتب خشبي قديم، يراقب من النافذة أضواء الأبراج التي لا تخصه بعد... فجأة جاءه عرض غريب من مجهول: عنوان واحد فقط، وشروط لن يصدقها أحد.`,
+		`قال له جدّه ذات مساء: «النقود لا تنام يا بني، لكنها تختار أصحابها بعناية.» ثم وضع في يده عملة مؤرخة بعام صعب، وقال: احفظ هذه حتى تأتي اللحظة.`,
+		`بدأت الحكاية برقم قياسي خرج عن كل التوقعات... ثم انكشف تدريجيًا ذلك العقل المدبر الذي أعاد رسم سماء المدينة خلال ليلة واحدة دون أن ينام.`,
+		`كان يجلس في آخر مقعد بالقاعة يستمع لمن يقولون إن الثروة تعني الحظ... وبعد عشر سنوات، صار نفسوه هم الدرس الأول في كل جامعة اقتصاد بالمدينة.`,
 	}
-	txt := base[id%len(base)]
 
-	// توسيع للفيديوهات الطويلة: طبقات سرد تُكرر بأقواس مختلفة
+	txt := base[id%len(base)]
+	txt += " " + h.VoiceLine + " "
+
+	// طبقات سرد — توسع حقيقي يبلغ قراءة ~15 دقيقة
 	extensions := []string{
-		" وفي تلك اللحظة نفسها، بدأ العالم الخارجي بالتحرك...",
-		" لكن الحقيقة التي لم يعرفها أحد أنها البداية وليس النهاية.",
-		" وبعد سنوات طويلة، أدرك الجميع أن هذه اللحظة حددت مصير المدينة بأسرها.",
+		" وفي تلك اللحظة نفسها، بدأ العالم الخارجي يتحرك على نحوٍ لم يتوقعه أحد...",
+		" لكن الحقيقة التي لم يعرفها أحد أنها كانت البداية وليست النهاية إطلاقًا.",
+		" وبعد سنوات طويلة، أدرك الجميع أن تلك اللحظة حددت مصير المدينة بأسرها.",
+		" الصفقة كانت تبدو مستحيلة على الورق... لكنها بُنيت على فهم أعمق لطبيعة الناس والمال.",
+		" وكلما توغل في التفاصيل، أدرك أن السر ليس في الكسب... بل في الشراكة الذكية.",
+		" خلف كل رقم ضخم، كان هناك إنسان عادي اتخذ قرارًا غير عادي في الوقت المناسب تمامًا.",
 	}
-	for i := 0; i < 25; i++ { // توسيع حقيقي يبلغ ~15 دقيقة قراءة
+
+	for i := 0; i < 40; i++ {
 		txt += extensions[i%len(extensions)] + " "
 	}
 	return txt
 }
 
-// cinematicQueries جمل بحث سينمائية تتغير لكل فيديو
-func cinematicQueries(id int) [][]string {
+// cinematicQueries جمل بحث سينمائية — تتغير لكل فيديو (درون/بطيء/فاخر)
+func cinematicQueries(id int) []string {
 	pool := [][]string{
 		{"money falling slow motion", "gold coins macro", "luxury watch closeup"},
 		{"city skyline aerial night", "businessman walking city", "office skyscraper glass"},
@@ -153,14 +171,14 @@ func cinematicQueries(id int) [][]string {
 // shortTitle نسخة قصيرة للنص على الثامبنيل
 func shortTitle(t string) string {
 	r := []rune(t)
-	if len(r) > 14 {
-		return string(r[:14])
+	if len(r) > 18 {
+		return string(r[:18])
 	}
 	return t
 }
 
 // ============================================================
-//  main — تشغيل متوازٍ ذكي
+//  main — تشغيل متوازٍ ذكي (4 عمال)
 // ============================================================
 func main() {
 	count := 4
@@ -173,7 +191,7 @@ func main() {
 
 	fmt.Printf("🔥 GOD ENGINE START | videos=%d | parallel=4\n", count)
 
-	// حفظ الحالة
+	// حفظ حالة التشغيل
 	os.MkdirAll("schedule", 0o755)
 	state, _ := json.MarshalIndent(map[string]interface{}{
 		"run":   os.Getenv("GITHUB_RUN_NUMBER"),
