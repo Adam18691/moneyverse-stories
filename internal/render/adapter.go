@@ -6,13 +6,41 @@ import (
 	"os/exec"
 )
 
-// Build: توافق مع main.go — يلف RenderVideo
-// story + voice → فيديو نهائي في outPath
-func Build(id int, story, voicePath, outPath string) error {
+// Build: توافق مرن مع main.go — يقبل:
+//   Build(story, voicePath, outPath)          ← 3 نصوص
+//   Build(id, story, voicePath, outPath)      ← int + 3 نصوص
+func Build(args ...interface{}) error {
 
+	// تحليل المدخلات المرنة
+	id := 0
+	var story, voicePath, outPath string
+
+	strs := []string{}
+	for _, a := range args {
+		switch v := a.(type) {
+		case int:
+			id = v
+		case string:
+			strs = append(strs, v)
+		}
+	}
+
+	switch len(strs) {
+	case 3: // story, voice, out
+		story, voicePath, outPath = strs[0], strs[1], strs[2]
+	case 2: // voice, out
+		voicePath, outPath = strs[0], strs[1]
+	default:
+		return fmt.Errorf("render.Build: مدخلات غير متوقعة (%d)", len(args))
+	}
+
+	if voicePath == "" || !fileExists(voicePath) {
+		return fmt.Errorf("ملف الصوت غير موجود: %s", voicePath)
+	}
+
+	// صورة المشهد — احتياطية إن لم توجد
 	img := "assets/burning_money.jpg"
 	if !fileExists(img) {
-		// إنشاء صورة سوداء احتياطية عبر ffmpeg
 		_ = os.MkdirAll("assets", 0755)
 		cmd := exec.Command("ffmpeg", "-y",
 			"-f", "lavfi", "-i", "color=c=black:s=1280x720",
@@ -24,7 +52,7 @@ func Build(id int, story, voicePath, outPath string) error {
 
 	in := Input{
 		VideoID:   id,
-		Scenes:    []Scene{{ImagePath: img, Text: "قصة", Duration: 0}},
+		Scenes:    []Scene{{ImagePath: img, Text: cutRunes(story, 30), Duration: 0}},
 		VoicePath: voicePath,
 	}
 
@@ -39,4 +67,13 @@ func Build(id int, story, voicePath, outPath string) error {
 	}
 	fmt.Printf("   🎬 BUILD: %s\n", outPath)
 	return nil
+}
+
+// cutRunes: قص آمن يحترم الحروف العربية
+func cutRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }
