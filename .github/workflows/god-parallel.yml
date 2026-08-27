@@ -49,7 +49,20 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       # ============================================================
-      # 🔊 Piper TTS — الحزمة الكاملة (بالمكتبات + espeak-data)
+      # 🥇 Kokoro-82M — الممثل المميز (أمريكي Apache 2.0 تجاري)
+      # ============================================================
+      - name: 🥇 Install Kokoro-82M (professional voice actor)
+        run: |
+          pip install kokoro soundfile --quiet
+          pip install misaki[ar] --quiet
+          python3 -c "
+          from kokoro import KPipeline
+          p = KPipeline(lang_code='a')
+          print('✅ kokoro-82M ready — professional voice engine')
+          " || echo "⚠️ kokoro فشل — سيُستخدم piper/edge-tts تلقائياً"
+
+      # ============================================================
+      # 🔊 Piper TTS — الحزمة الكاملة (المستوى الثاني)
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
         run: |
@@ -62,10 +75,9 @@ jobs:
           echo "✅ piper bundle installed (libs + espeak-data داخلها)"
 
       # ============================================================
-      # 🎙️ موديلات صوتية ترقية 2025 — أفضل الأصوات مفتوحة المصدر
-      #    مرايا متعددة + تحقق ذكي + fallback سحابي يغطي أي ناقص
+      # 🎙️ موديلات Piper — مرايا متعددة + تحقق ذكي
       # ============================================================
-      - name: 🎙️ Download Premium Voice Models
+      - name: 🎙️ Download Piper Voice Models
         run: |
           mkdir -p models
           MIRRORS=(
@@ -89,42 +101,17 @@ jobs:
               rm -f "models/$NAME.onnx"
               echo "  ⚠️ فشل من $SRC"
             done
-            echo "  🔁 $NAME — سيُستخدم البديل السحابي edge-tts لهذه اللغة"
-            return 0   # لا يوقف الباقي — edge-tts يغطيه
+            echo "  🔁 $NAME — edge-tts سيغطيها"
+            return 0
           }
-          # العاشر عربياً — كريم الأردني (أفضل صوت عربي في piper)
           download "ar/ar_JO/kareem/medium/ar_JO-kareem-medium"
-          # الإنجليزية الأمريكية — ريان (studio quality)
           download "en/en_US/ryan/high/en_US-ryan-high"
-          # الإسبانية — carlfm
           download "es/es_ES/carlfm/x_low/es_ES-carlfm-x-low"
-          # التركية — فخر الدين
           download "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium"
-          # الفرنسية — سيميس (أوروبا الغربية)
           download "fr/fr_FR/siwis/low/fr_FR-siwis-low"
-          # الألمانية — إيفا كي (أوروبا الوسطى)
           download "de/de_DE/eva_k-x_low/de_DE-eva_k-x-low"
-          echo ""
           echo "📁 models/ النهائي:"
           ls -la models/
-
-      # ============================================================
-      # 🌐 خريطة أصوات edge-tts العصبية الاحتياطية
-      # ============================================================
-      - name: 🌐 Configure Edge-TTS Fallback
-        run: |
-          mkdir -p voices_fallback
-          cat > voices_fallback/map.json << 'EOF'
-          {
-            "ar": "ar-SA-HamedNeural",
-            "en": "en-US-GuyNeural",
-            "es": "es-ES-AlvaroNeural",
-            "tr": "tr-TR-AhmetNeural",
-            "fr": "fr-FR-HenriNeural",
-            "de": "de-DE-ConradNeural"
-          }
-          EOF
-          echo "✅ خريطة edge-tts الاحتياطية جاهزة"
 
       # ============================================================
       # 🔨 البناء
