@@ -43,26 +43,41 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       # ============================================================
-      # 🔊 الصوت — تثبيت Piper + الصوت العربي (جديد!)
+      # 🔊 Piper TTS — الحزمة الكاملة (بال مكتباتها + espeak)
       # ============================================================
-      - name: 🎙️ Install Piper TTS
+      - name: 🎙️ Install Piper TTS (full bundle)
         run: |
           cd $HOME
           curl -sL "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" -o piper.tar.gz
           tar xzf piper.tar.gz
-          sudo cp piper/piper /usr/local/bin/
-          echo "✅ piper installed"
+          sudo rm -rf /opt/piper
+          sudo mv piper /opt/piper
+          sudo ln -sf /opt/piper/piper /usr/local/bin/piper
+          echo "📦 محتويات الحزمة:"
+          ls -la /opt/piper/
+          echo "✅ piper bundle installed (libs + espeak-data داخلها)"
 
-      - name: 🎙️ Download Arabic Voice
+      # ============================================================
+      # 🎙️ موديلات الأصوات — مطابقة لأسماء tts.go بالضبط
+      # ============================================================
+      - name: 🎙️ Download All Voice Models
         run: |
           mkdir -p models
-          BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx"
-          curl -sL "$BASE" -o models/ar_JO-kareem-medium.onnx
-          curl -sL "$BASE.json" -o models/ar_JO-kareem-medium.onnx.json
+          HF="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+          download() {
+            curl -sL "HF/HF/HF/1.onnx" -o "models/(basename(basename(basename1).onnx"
+            curl -sL "HF/HF/HF/1.onnx.json" -o "models/(basename(basename(basename1).onnx.json"
+            echo "  ✅ (basename(basename(basename1).onnx"
+          }
+          download "ar/ar_JO/kareem/medium/ar_JO-kareem-medium"
+          download "en/en_US/ryan/high/en_US-ryan-high"
+          download "es/es_ES/carlfm/x_low/es_ES-carlfm-x-low"
+          download "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium"
+          echo "📁 models/ النهائي:"
           ls -la models/
 
       # ============================================================
-      # البناء والتحقق من الترجمة
+      # البناء
       # ============================================================
       - name: Build Engine
         run: |
@@ -72,7 +87,7 @@ jobs:
           echo "✅ BUILD OK"
 
       # ============================================================
-      # الإنتاج الكامل
+      # الإنتاج الكامل — مع مسار مكتبات piper
       # ============================================================
       - name: 🔥 GOD Production Run
         run: |
@@ -80,6 +95,8 @@ jobs:
         env:
           VIDEOS_COUNT: ${{ github.event.inputs.videos }}
           CGO_ENABLED: '0'
+          LD_LIBRARY_PATH: /opt/piper
+          PIPER_PATH: /opt/piper/piper
 
       # ============================================================
       # أرشفة النتائج (حتى لو فشل جزئياً)
