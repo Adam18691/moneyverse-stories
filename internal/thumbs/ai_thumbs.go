@@ -23,14 +23,14 @@ import (
 
 // AIThumbPlan: خطة الثامبنيل الكاملة من الـ AI
 type AIThumbPlan struct {
-	Text        string `json:"text"`         // 3-4 كلمات فقط
-	TextColor   string `json:"text_color"`   // yellow/red/white/green
-	Emotion     string `json:"emotion"`      // shock/greed/fear/hope/anger
-	ArtPrompt   string `json:"art_prompt"`   // برومبت فني سينمائي بالإنجليزي
-	Style       string `json:"style"`        // hyperrealistic/cinematic/dramatic
-	Lighting    string `json:"lighting"`     // golden hour/neon/dramatic shadows
-	Composition string `json:"composition"`  // close-up face/rule of thirds
-	Emoji       string `json:"emoji"`        // 💰🔥😱⚡🏆
+	Text        string `json:"text"`        // 3-4 كلمات فقط
+	TextColor   string `json:"text_color"`  // yellow/red/white/green
+	Emotion     string `json:"emotion"`     // shock/greed/fear/hope/anger
+	ArtPrompt   string `json:"art_prompt"`  // برومبت فني سينمائي بالإنجليزي
+	Style       string `json:"style"`       // hyperrealistic/cinematic/dramatic
+	Lighting    string `json:"lighting"`    // golden hour/neon/dramatic shadows
+	Composition string `json:"composition"` // close-up face/rule of thirds
+	Emoji       string `json:"emoji"`       // 💰🔥😱⚡🏆
 }
 
 // QCReport: تقرير فحص الجودة
@@ -377,7 +377,6 @@ func togetherGenerate(prompt, key, outPath string) string {
 
 // ══════════════════════════════════════════
 // 🖌️ proEdit — المحرر الاحترافي الذكي
-// تحسين لوني حسب العاطفة + فينيت + نص بجودة استوديو
 // ══════════════════════════════════════════
 
 func proEdit(plan AIThumbPlan, bgPath, outPath string) error {
@@ -396,7 +395,7 @@ func proEdit(plan AIThumbPlan, bgPath, outPath string) error {
 	}
 
 	// 🎬 تحسين المدير الفني حسب العاطفة:
-	brightness, saturation, contrast := "103", "115", "0"
+	brightness, saturation := "103", "115"
 	switch plan.Emotion {
 	case "shock", "fear":
 		brightness, saturation = "100", "120" // تباين بارد حاد
@@ -428,7 +427,6 @@ func proEdit(plan AIThumbPlan, bgPath, outPath string) error {
 		"-quality", "95",
 		outPath,
 	}
-	_ = contrast
 	cmd := exec.Command("convert", args...)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%v: %s", err, string(b))
@@ -589,7 +587,8 @@ func pexelsSearch(query, key string, id int) string {
 	return downloadImage(out.Photos[idx].Src.Large2x, fmt.Sprintf("thumbs/bg_%d.jpg", id))
 }
 
-funcabaySearch(query, key string, id int) string {
+// ✅ الإصلاح هنا: func pixabaySearch (كان funcabaySearch)
+func pixabaySearch(query, key string, id int) string {
 	url := fmt.Sprintf(
 		"https://pixabay.com/api/?key=%s&q=%s&per_page=5&image_type=photo",
 		key, strings.ReplaceAll(query, " ", "+"))
