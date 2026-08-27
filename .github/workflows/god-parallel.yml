@@ -116,7 +116,20 @@ jobs:
           PIPER_PATH: /opt/piper/piper
 
       # ============================================================
-      # 📦 أرشفة النتائج
+      # 🔍 تشخيص — أين الفيديوهات فعلياً؟
+      # ============================================================
+      - name: 🔍 Locate Output Files
+        if: always()
+        run: |
+          echo "═══ كل ملفات mp4 في المستودع ═══"
+          find . -name "*.mp4" -not -path "./models/*" -not -path "./.git/*" || true
+          echo "═══ كل ملفات wav ═══"
+          find . -name "*.wav" -not -path "./models/*" -not -path "./.git/*" || true
+          echo "═══ محتوى الجذر ═══"
+          ls -la
+
+      # ============================================================
+      # 📦 أرشفة النتائج — تلتقط الفيديوهات أينما كانت!
       # ============================================================
       - name: 📦 Archive Videos
         if: always()
@@ -124,9 +137,11 @@ jobs:
         with:
           name: videos-${{ github.run_number }}
           path: |
-            output/*.mp4
-            thumbnails/*.jpg
-            subtitles/*.srt
+            **/*.mp4
+            **/*.jpg
+            **/*.srt
+            !models/**
+            !.git/**
           if-no-files-found: ignore
 
       - name: 💾 Save State Back
