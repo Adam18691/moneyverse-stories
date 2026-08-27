@@ -1,53 +1,119 @@
 name: 💰 GOD Money Stories Engine
 
 on:
-  schedule:
-    - cron: '0 6 * * *'   # يومياً 06:00 UTC = 4 فيديوهات كل يوم ⏰
-  push:
   workflow_dispatch:
+    inputs:
+      videos:
+        description: 'عدد الفيديوهات (0=parallel)'
+        required: false
+        default: '4'
+  schedule:
+    - cron: '0 */6 * * *'   # كل 6 ساعات تلقائيًا
+  push:
+    branches: [ main ]
+    paths:
+      -.go'
+      - '.github/workflows/god-parallel.yml'
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  god-engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 350
 
-      - uses: actions/setup-go@v5
+    steps:
+      # ================= المستودع + Go =================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: false
 
+      # ================= محرك الرندر السينمائي =================
       - name: Install Engine Stack
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            gstreamer1.0-tools gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-libav \
-            melt imagemagick piper espeak-ng
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            melt \
+            gstreamer1.0-tools \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            imagemagick \
+            fonts-dejavu-core \
+            p7zip-full
+          pip install --quiet edge-tts
+          echo "=== ENGINE READY ==="
+          which melt && melt -version | head -2 || true
+          which gst-launch-1.0 || true
+          which convert || true
+          which edge-tts || true
 
-      - name: Write YouTube Credentials
+      # ================= الأسرار → ملفات =================
+      - name: Write Credentials
+        env:
+          CLIENT_ID:       ${{ secrets.YT_CLIENT_ID }}
+          CLIENT_SECRET:   ${{ secrets.YT_CLIENT_SECRET }}
+          REFRESH_TOKEN:   ${{ secrets.YT_REFRESH_TOKEN }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          PEXELS_API_KEY:  ${{ secrets.PEXELS_API_KEY }}
         run: |
-          mkdir -p credentials
-          echo "${{ secrets.YOUTUBE_CLIENT_ID }}" > credentials/client_id.txt
-          echo "${{ secrets.YOUTUBE_CLIENT_SECRET }}" > credentials/client_secret.txt
-          echo "${{ secrets.YOUTUBE_REFRESH_TOKEN }}" > credentials/refresh_token.txt
-          printf '{\n  "installed": {\n    "client_id": "%s",\n    "client_secret": "%s",\n    "auth_uri": "https://accounts.google.com/o/oauth2/auth",\n    "token_uri": "https://oauth2.googleapis.com/token",\n    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",\n    "redirect_uris": ["https://developers.google.com/oauthplayground"]\n  }\n}\n' "secrets.YOUTUBECLIENTID""{{ secrets.YOUTUBE_CLIENT_ID }}" "secrets.YOUTUBEC​LIENTI​D""{{ secrets.YOUTUBE_CLIENT_SECRET }}" > credentials/client_secret.json
+          mkdir -p credentials secrets output audio thumbs scenes music_cache schedule
+
+          echo "$CLIENT_ID"     > credentials/client_id.txt
+          echo "$CLIENT_SECRET" > credentials/client_secret.txt
+          echo "$REFRESH_TOKEN" > credentials/refresh_token.txt
+          chmod 600 credentials/*.txt
+
+          [ -n "PIXABAY_API_KEY" ] && echo "PIXABAY_API_KEY" > secrets/pixabay_key.txt
+          [ -n "PEXELS_API_KEY"  ] && echo "PEXELS_API_KEY"  > secrets/pexels_key.txt
+
           echo "✅ Credentials written:"
           ls -la credentials/
+          ls -la secrets/
 
-      - run: go mod tidy
+      # ================= البناء والتحقق من الترجمة =================
+      - name: Build Engine
+        run: |
+          go mod tidy
+          go vet ./... || true
+          go build -o god-engine .
+          echo "✅ BUILD OK"
 
-      - name: 🚀 Build + Upload 4 Videos Parallel
-        run: go run main.go
+      # ================= الإنتاج الكامل =================
+      - name: 🔥 GOD Production Run
+        run: |
+          ./god-engine
+        env:
+          VIDEOS_COUNT: ${{ github.event.inputs.videos }}
+          CGO_ENABLED: '0'
 
-      - name: 💾 Commit Publish Schedule State
+      # ================= أرشفة النتائج (حتى لو فشل جزئيًا) =================
+      - name: Archive Videos
         if: always()
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: actions/upload-artifact@v4
         with:
-          commit_message: "⏰ update pending schedule [skip ci]"
-          file_pattern: schedule/pending.json
+          name: money-videos-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            thumbs/*.jpg
+            schedule/pending.json
+          retention-days: 3
+          if-no-files-found: warn
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: money-stories-day-${{ github.run_number }}
-          path: output/*.mp4
-          retention-days: 5
+      # ================= سجل النجاح في المستودع =================
+      - name: Save State
+        if: success()
+        run: |
+          git config user.name  "god-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add schedule/ 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "📊 production state run#${{ github.run_number }}"
+          git push || true
