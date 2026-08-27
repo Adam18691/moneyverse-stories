@@ -28,7 +28,6 @@ jobs:
       # 🧰 أدوات أساسية — ffmpeg + edge-tts
       # ============================================================
       - name: 🧰 Install Tools (ffmpeg + edge-tts)
-        shell: bash
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
@@ -37,10 +36,9 @@ jobs:
           which edge-tts
 
       # ============================================================
-      # 🔑 بيانات الاعتماد
+      # 🔑 بيانات الاعتماد + المجلدات
       # ============================================================
       - name: 🔑 Write Credentials
-        shell: bash
         run: |
           mkdir -p credentials secrets models data output thumbnails subtitles audio
           echo "PEXELS_API_KEY=$PEXELS_API_KEY" >> credentials/env
@@ -52,7 +50,6 @@ jobs:
       # 🥇 Kokoro-82M — الممثل المميز (Apache 2.0 تجاري)
       # ============================================================
       - name: 🥇 Install Kokoro-82M (professional voice actor)
-        shell: bash
         run: |
           pip install kokoro soundfile --quiet
           pip install "misaki[ar]" --quiet
@@ -66,7 +63,6 @@ jobs:
       # 🗣️ Piper TTS — الحزمة الكاملة (المستوى الثاني)
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
-        shell: bash
         run: |
           cd $HOME
           curl -sL "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" -o piper.tar.gz
@@ -77,40 +73,30 @@ jobs:
           echo "✅ piper bundle installed (libs + espeak-data داخلها)"
 
       # ============================================================
-      # 🎙️ موديلات Piper — bash مصري + مصفوفات
+      # 🎙️ موديلات Piper — 12 أمر curl مباشرة (بلا حلقات ولا مصفوفات)
       # ============================================================
       - name: 🎙️ Download Piper Voice Models
-        shell: bash
         run: |
           mkdir -p models
           BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
-          MODELS=(
-            "ar/ar_JO/kareem/medium/ar_JO-kareem-medium"
-            "en/en_US/ryan/high/en_US-ryan-high"
-            "es/es_ES/carlfm/x_low/es_ES-carlfm-x-low"
-            "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium"
-            "fr/fr_FR/siwis/low/fr_FR-siwis-low"
-            "de/de_DE/eva_k-x_low/de_DE-eva_k-x-low"
-          )
-          for P in "${MODELS[@]}"; do
-            NAME=(basename"(basename "(basename"P")
-            curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 "BASE/BASE/BASE/P.onnx" -o "models/$NAME.onnx"
-            curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 "BASE/BASE/BASE/P.onnx.json" -o "models/$NAME.onnx.json"
-            SIZE=(stat−c(stat -c%s "models/(stat−cNAME.onnx" 2>/dev/null || echo 0)
-            if [ "$SIZE" -gt 1000000 ]; then
-              echo "✅ $NAME"
-            else
-              rm -f "models/$NAME.onnx"
-              echo "🔁 $NAME — edge-tts سيغطيها"
-            fi
-          done
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx" -o models/ar_JO-kareem-medium.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx.json" -o models/ar_JO-kareem-medium.onnx.json
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/en/en_US/ryan/high/en_US-ryan-high.onnx" -o models/en_US-ryan-high.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/en/en_US/ryan/high/en_US-ryan-high.onnx.json" -o models/en_US-ryan-high.onnx.json
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/es/es_ES/carlfm/x_low/es_ES-carlfm-x-low.onnx" -o models/es_ES-carlfm-x-low.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/es/es_ES/carlfm/x_low/es_ES-carlfm-x-low.onnx.json" -o models/es_ES-carlfm-x-low.onnx.json
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx" -o models/tr_TR-fahrettin-medium.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx.json" -o models/tr_TR-fahrettin-medium.onnx.json
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx" -o models/fr_FR-siwis-low.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx.json" -o models/fr_FR-siwis-low.onnx.json
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx" -o models/de_DE-eva_k-x-low.onnx
+          curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx.json" -o models/de_DE-eva_k-x-low.onnx.json
           ls -la models/
 
       # ============================================================
       # 🔨 البناء
       # ============================================================
       - name: Build Engine
-        shell: bash
         run: |
           go mod tidy
           go vet ./... || true
@@ -121,7 +107,6 @@ jobs:
       # 🔥 الإنتاج الكامل
       # ============================================================
       - name: 🔥 GOD Production Run
-        shell: bash
         run: |
           ./god-engine
         env:
