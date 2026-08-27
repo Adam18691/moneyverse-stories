@@ -1,94 +1,98 @@
-package trends
+// ══════════════════════════════════════════
+// 🏆 TOP 4: أقوى 4 ترندات عالمياً — أساس الفيديوهات الأربعة
+// ══════════════════════════════════════════
 
-import (
-	"encoding/xml"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-)
-
-type TrendWindow struct {
-	Region      string
-	BestHourUTC int
-	Audience    string
+type TopTrend struct {
+	Rank       int    `json:"rank"`         // 1-4
+	Trend      string `json:"trend"`        // الترند نفسه
+	Source     string `json:"source"`       // الدولة المصدر "US"
+	Continent  string `json:"continent"`    // القارة
+	Story      string `json:"story"`        // القصة المالية المرتبطة
+	Hook       string `json:"hook"`         // هوك صادم
+	Angle      string `json:"angle"`        // زاوية السرد
+	ViralScore int    `json:"viral_score"`  // 1-10
+	BestRegion string `json:"best_region"`  // أفضل سوق للنشر US/SA/...
 }
 
-var GlobalTrendWindows = []TrendWindow{
-	{"🇺🇸 أمريكا", 22, "ذروة 12-2 ظهراً + 7-10 مساءً — أعلى RPM"},
-	{"🇸🇦 الخليج", 17, "ذروة بعد العشاء 9-11 مساءً"},
-	{"🇹🇷 تركيا", 16, "ذروة بعد العشاء"},
-	{"🇮🇳 الهند", 13, "ذروة 8-11 مساءً — أكبر جمهور"},
-	{"🇮🇩 إندونيسيا", 10, "ذروة 7-10 مساءً"},
-}
-
-type Seasonal struct {
-	Month string
-	Event string
-	Idea  string
-	Power int
-}
-
-var SeasonalTrends = []Seasonal{
-	{"يناير", "قرارات العام الجديد", "كيف بدأت الثروات يوم 1 يناير؟", 10},
-	{"فبراير", "Tax Season أمريكا", "قصص تهرب ضريبي أسقطت مليونيرات", 7},
-	{"مارس", "رمضان — زكاة وتجارة", "قصص تجارة الصحابة وزكاة المال", 10},
-	{"يونيو", "تخرج ووظائف جديدة", "من أول راتب إلى أول مليون", 7},
-	{"سبتمبر", "Back to Business", "خطط الأثرياء للربع الأخير", 8},
-	{"نوفمبر", "Black Friday", "قصة اختراع Black Friday وأرباحه", 10},
-	{"ديسمبر", "مراجعات العام", "أكبر صفقات أنهت العام بمليارات", 9},
-}
-
-// FetchDailyTrends: ترندات Google المجانية بدون API key
-func FetchDailyTrends(country string) ([]string, error) {
-	url := fmt.Sprintf("https://trends.google.com/trending/rss?geo=%s", country)
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var feed struct {
-		Items []struct {
-			Title string `xml:"title"`
-		} `xml:"item"`
-	}
-	if err := xml.Unmarshal(body, &feed); err != nil {
-		return nil, err
-	}
-
-	var out []string
-	for _, it := range feed.Items {
-		out = append(out, it.Title)
-	}
-	return out, nil
-}
-
-// MatchStoryToTrend: يربط الترند بقصة مالية
-func MatchStoryToTrend(trend string) string {
-	matches := map[string]string{
-		"inflation": "قصة الدولار الذي فقد نصف قيمته.. ومن ربح من الانهيار",
-		"crypto":    "قصة الشاب الذي راهن آخر 100$ على عملة رقمية",
-		"ai":        "قصة أول مليونير بالذكاء الاصطناعي",
-		"housing":   "قصة العقار: من مستأجر إلى مالك 50 عقاراً",
-		"stocks":    "قصة السهم الذي صعد 10000% في سنة",
-		"bank":      "قصة البنك الذي انهار.. ومن توقّع الأمر قبل الجميع",
-		"economy":   "قصة اقتصاد انهار ونهض بقرار واحد",
-		"money":     "قصة الرجل الذي ضاعف ثروته في أزمة الجميع",
-	}
-	low := strings.ToLower(trend)
-	for k, story := range matches {
-		if strings.Contains(low, k) {
-			return story
+// Top4Trends: AI يرتب أقوى 4 ترندات من كل العالم ويصنع قصة لكل واحد
+func Top4Trends(worldTrends map[string][]string) []TopTrend {
+	// نجمّع الترندات مع مصدرها وقارتها
+	codeToContinent := map[string]string{}
+	for _, cont := range World {
+		for _, c := range cont.Countries {
+			codeToContinent[c.Code] = cont.Name
 		}
 	}
-	return ""
+
+	var b strings.Builder
+	for code, trs := range worldTrends {
+		limit := len(trs)
+		if limit > 3 {
+			limit = 3 // أول 3 من كل دولة — توفير tokens
+		}
+		for i := 0; i < limit; i++ {
+			b.WriteString(fmt.Sprintf("%s|قارة:%s|%s\n",
+				trs[i], codeToContinent[code], code))
+		}
+	}
+
+	prompt := fmt.Sprintf(`ترندات Google الحقيقية اليوم من 28 دولة (6 قارات)، بصيغة:
+الترند|القارة|كود الدولة
+%s
+
+المطلوب JSON فقط: اختر أقوى 4 ترندات عالمياً يمكن تحويلها لقصص مالية/أعمال ملهمة.
+شرط مهم: الترندات الأربعة من دول/قارات مختلفة قدر الإمكان + لكل واحدة أفضل سوق نشر.
+{"trends": [
+ {"rank":1,"trend":"...","source":"US","continent":"🌎 أمريكا الشمالية",
+  "story":"قصة مالية ملهمة 200 كلمة بالعربي","hook":"جملة صادمة <15 كلمة",
+  "angle":"زاوية السرد","viral_score":9,"best_region":"US"},
+ {"rank":2,...},{"rank":3,...},{"rank":4,...}
+]}`, b.String())
+
+	resp, err := ai.Chat("خبير فيروسية محتوى قصص المال العالمي", prompt)
+	if err != nil {
+		fmt.Println("   ⚠️ AI Top4 فشل → fallback للترندات الخام")
+		return fallbackTop4(worldTrends)
+	}
+
+	var out struct {
+		Trends []TopTrend `json:"trends"`
+	}
+	if json.Unmarshal([]byte(extractJSON(resp)), &out) == nil && len(out.Trends) > 0 {
+		// 🔒 حماية: دائماً بالضبط 4 أو أقل
+		if len(out.Trends) > 4 {
+			out.Trends = out.Trends[:4]
+		}
+	.Println("\n🏆 TOP 4 GLOBAL TRENDS:")
+		for _, t := range out.Trends {
+			fmt.Printf("   #%d (%d/10) [%s %s] %s → %s\n",
+				t.Rank, t.ViralScore, t.Source, t.Continent, t.Trend, t.Hook)
+		}
+		return out.Trends
+	}
+	return fallbackTop4(worldTrends)
 }
 
-var _ = time.Now
+// fallbackTop4: لو الـ AI فشل — أول 4 ترندات خام من أقوى الأسواق
+func fallbackTop4(worldTrends map[string][]string) []TopTrend {
+	priority := []string{"US", "GB", "DE", "SA", "AE", "IN", "BR", "JP"}
+	var out []TopTrend
+	rank := 1
+	for _, code := range priority {
+		trs, ok := worldTrends[code]
+		if !ok || len(trs) == 0 {
+			continue
+		}
+		out = append(out, TopTrend{
+			Rank: rank, Trend: trs[0], Source: code,
+			Story: "قصة مالية ملهمة عن " + trs[0],
+			Hook:  "ما حدسدهاش حد!", Angle: "دراما مالية",
+			ViralScore: 5, BestRegion: code,
+		})
+		rank++
+		if rank > 4 { // 🔒 أصلاً 4
+			break
+		}
+	}
+	return out
+}
