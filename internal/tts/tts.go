@@ -10,9 +10,36 @@ import (
 
 // ══════════════════════════════════════════════════════
 // 🎙️ نظام الصوت الثلاثي — السقوط الآمن:
-//    1️⃣ kokoro-82M (إنجليزي فقط — بصوت af_heart)
+//    1️⃣ kokoro-82M (إنجليزي — بصوت af_heart)
 //    2️⃣ piper (عربي + لغات الأوروبا)
 //    3️⃣ edge-tts 6.1.19 (شبكة الأمان الأخيرة)
+// ══════════════════════════════════════════════════════
+
+// ─── 🔌 الدوال التي يستدعيها main.go — توقيعات مطابقة 100% ───
+
+// Narrate: يولّد الصوت الرئيسي للقصة — (النص، اللغة، مسار الإخراج)
+// الاستدعاء في main.go سطر 87: tts.Narrate(h.VoiceLine+"\n"+story, "ar", vo)
+func Narrate(text, lang, outPath string) error {
+	return Generate(text, lang, outPath)
+}
+
+// DubAllLanguages: يولّد دبلجة القصة لكل اللغات —
+// الاستدعاء في main.go سطر 91: dubs := tts.DubAllLanguages(scriptsLangs, id)
+func DubAllLanguages(langs map[string]string, id int) map[string]string {
+	dubs := make(map[string]string)
+	for lang, script := range langs {
+		path := fmt.Sprintf("audio/%d_%s.wav", id, lang)
+		if err := Generate(script, lang, path); err != nil {
+			fmt.Printf("   ⚠️ dub [%s] فشل — تخطي: %v\n", lang, err)
+			continue
+		}
+		dubs[lang] = path
+	}
+	return dubs
+}
+
+// ══════════════════════════════════════════════════════
+// 🎛️ المحرك الرئيسي — Generate: نقطة الدخول الموحدة
 // ══════════════════════════════════════════════════════
 
 // Generate: يولد ملف صوتي للنص حسب اللغة — يرجع مسار الملف
