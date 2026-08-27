@@ -1,8 +1,8 @@
-name: ⏰ Scheduled Publisher
+name: 🗓️ Scheduled Publisher
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # كل ساعتين — قبل ذروة كل منطقة بتوافق التوقيت
+    - cron: '0 */2 * * *' # كل ساعتين — في بداية كل منتصف الساعة
   workflow_dispatch:
 
 permissions:
@@ -21,10 +21,10 @@ jobs:
 
       - run: go mod tidy
 
-      - name: 📤 Check & Publish Due Videos
-        run: go run publish.go
+      - name: 🗓️ Check & Publish Due Videos
+        run: go run ./cmd/publisher
         env:
-          # 📺 نظام الـ 3 أسرار — بدون ملف credentials
+          # بيانات الاعتماد — نظام 3 أسطر (بدون ملف JSON)
           YT_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
@@ -33,5 +33,5 @@ jobs:
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "⏰ publisher state update [skip ci]"
+          commit_message: "🗓️ publisher state update [skip ci]"
           file_pattern: schedule/pending.json
