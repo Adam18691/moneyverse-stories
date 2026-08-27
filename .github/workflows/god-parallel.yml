@@ -49,7 +49,7 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       # ============================================================
-      # 🥇 Kokoro-82M — الممثل المميز (أمريكي Apache 2.0 تجاري)
+      # 🥇 Kokoro-82M — الممثل المميز (Apache 2.0 تجاري)
       # ============================================================
       - name: 🥇 Install Kokoro-82M (professional voice actor)
         run: |
@@ -62,7 +62,7 @@ jobs:
           " || echo "⚠️ kokoro فشل — سيُستخدم piper/edge-tts تلقائياً"
 
       # ============================================================
-      # 🔊 Piper TTS — الحزمة الكاملة (المستوى الثاني)
+      # 🗣️ Piper TTS — الحزمة الكاملة (المستوى الثاني)
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
         run: |
@@ -75,33 +75,26 @@ jobs:
           echo "✅ piper bundle installed (libs + espeak-data داخلها)"
 
       # ============================================================
-      # 🎙️ موديلات Piper — مرايا متعددة + تحقق ذكي
+      # 🎙️ موديلات Piper — بلا مصفوفات (متوافق مع dash/sh)
       # ============================================================
       - name: 🎙️ Download Piper Voice Models
         run: |
           mkdir -p models
-          MIRRORS=(
-            "https://huggingface.co/rhasspy/piper-voices/resolve/main"
-            "https://hf-mirror.com/rhasspy/piper-voices/resolve/main"
-          )
           download() {
-            local NAME=(basename(basename(basename1)
-            [ -s "models/NAME.onnx" ] && SIZE=(stat -c%s "models/$NAME.onnx") && \
-              [ "SIZE" -gt 1000000 ] && { echo "  ⏭️NAME موجود مسبقاً"; return 0; }
-            for SRC in "${MIRRORS[@]}"; do
-              curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
-                "SRC/SRC/SRC/1.onnx" -o "models/$NAME.onnx"
-              curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
-                "SRC/SRC/SRC/1.onnx.json" -o "models/$NAME.onnx.json"
-              SIZE=(stat−c(stat -c%s "models/(stat−cNAME.onnx" 2>/dev/null || echo 0)
-              if [ "$SIZE" -gt 1000000 ]; then
-                echo "  ✅ NAME.onnx(NAME.onnx (NAME.onnx(((SIZE/1024/1024))MB)"
-                return 0
-              fi
+            NAME=(basename(basename(basename1)
+            SIZE=(stat−c(stat -c%s "models/(stat−cNAME.onnx" 2>/dev/null || echo 0)
+            if [ "SIZE"−gt1000000];thenecho"⏭®SIZE" -gt 1000000 ]; then echo "  ⏭️SIZE"−gt1000000];thenecho"⏭R◯NAME موجود"; return 0; fi
+            curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
+              "https://huggingface.co/rhasspy/piper-voices/resolve/main/1.onnx"−o"models/1.onnx" -o "models/1.onnx"−o"models/NAME.onnx"
+            curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
+              "https://huggingface.co/rhasspy/piper-voices/resolve/main/1.onnx.json"−o"models/1.onnx.json" -o "models/1.onnx.json"−o"models/NAME.onnx.json"
+            SIZE=(stat−c(stat -c%s "models/(stat−cNAME.onnx" 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 1000000 ]; then
+              echo "  ✅ NAME.onnx(NAME.onnx (NAME.onnx(((SIZE/1024/1024))MB)"
+            else
               rm -f "models/$NAME.onnx"
-              echo "  ⚠️ فشل من $SRC"
-            done
-            echo "  🔁 $NAME — edge-tts سيغطيها"
+              echo "  🔁 $NAME — edge-tts سيغطيها"
+            fi
             return 0
           }
           download "ar/ar_JO/kareem/medium/ar_JO-kareem-medium"
@@ -110,7 +103,7 @@ jobs:
           download "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium"
           download "fr/fr_FR/siwis/low/fr_FR-siwis-low"
           download "de/de_DE/eva_k-x_low/de_DE-eva_k-x-low"
-          echo "📁 models/ النهائي:"
+          echo "📁 models/:"
           ls -la models/
 
       # ============================================================
