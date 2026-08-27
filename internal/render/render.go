@@ -5,123 +5,233 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
+	"strconv"
+	"strings"
 
 	"tayyibat-money/internal/music"
-	"tayyibat-money/internal/trends"
+	"tayyibat-money/internal/thumbs"
 )
 
-// ============================================================
-//  BuildStory — الخط السينمائي الكامل (نفس توقيع main.go)
-//  out: مسار الملف النهائي | id: رقم الفيديو
-// ============================================================
+// ══════════════════════════════════════════
+// 🎬 RENDER ENGINE — تجميع الفيديو النهائي
+// صور + صوت TTS + موسيقى خلفية → MP4 يوتيوب
+// ══════════════════════════════════════════
 
-func BuildStory(out string, id int) error {
-	os.MkdirAll("scenes", 0o755)
-	os.MkdirAll("music_cache", 0o755)
-	os.MkdirAll("output", 0o755)
+// Scene: مشهد واحد من الفيديو
+type Scene struct {
+	ImagePath string  // صورة المشهد
+	Text      string  // نص التعليق (اختياري للوج)
+	Duration  float64 // مدة المشهد بالثواني
+}
 
-	start := time.Now()
+// Input: مدخلات الرندر الكاملة
+type Input struct {
+	VideoID   int
+	Scenes    []Scene // مشاهد القصة
+	VoicePath string  // ملف صوت TTS كامل
+	MusicEmotion string // shock/greed/hope/fear
+	ThumbPath string  // ثامبنيل جاهز (اختياري)
+}
 
-	// ---- 1) مقاطع النخبة: الأطول + أعلى دقة + زوايا درون سينمائية ----
-	queries := cinematicQueries(id)
-	elite := trends.FetchBestCinematic(queries, 10)
-	if len(elite) == 0 {
-		fmt.Println("⚠️ RENDER: no elite clips, aborting story render")
-		return fmt.Errorf("no clips fetched")
+// Output: ناتج الرندر
+type Output struct {
+	VideoPath string
+	ThumbPath string
+	Duration  float64
+}
+
+// ══════════════════════════════════════════
+// 🎬 RenderVideo — خط الإنتاج الكامل
+// ══════════════════════════════════════════
+
+func RenderVideo(in Input) (Output, error) {
+
+	if in.VideoID <= 0 {
+		return Output{}, fmt.Errorf("invalid video id")
+	}
+	if in.VoicePath == "" || !fileExists(in.VoicePath) {
+		return Output{}, fmt.Errorf("ملف الصوت غير موجود: %s", in.VoicePath)
+	}
+	if len(in.Scenes) == 0 {
+		return Output{}, fmt.Errorf("لا توجد مشاهد")
 	}
 
-	var clipPaths []string
-	for _, c := range elite {
-		p, err := trends.Download(c, "scenes")
-		if err == nil {
-			clipPaths = append(clipPaths, p)
+	workDir := fmt.Sprintf("output/video_%d", in.VideoID)
+	_ = os.MkdirAll(workDir, 0755)
+	_ = os.MkdirAll("output", 0755)
+
+	// ── 1️⃣ مدة الصوت الكلي
+	voiceDur, err := audioDuration(in.VoicePath)
+	if err != nil {
+		voiceDur = float64(len(in.Scenes)) * 8.0 // تقدير احتياطي
+	}
+	fmt.Printf("   🎬 RENDER #%d: %d مشاهد | صوت %.0f ثانية\n",
+		in.VideoID, len(in.Scenes), voiceDur)
+
+	// ── 2️⃣ فيديو الصور المتتالية (slideshow) بنفس مدة الصوت
+	concatPath, err := buildSlideshow(in.Scenes, voiceDur, workDir)
+	if err != nil {
+		return Output{}, fmt.Errorf("slideshow: %w", err)
+	}
+
+	// ── 3️⃣ دمج الصوت مع الصور (بدون موسيقى — مؤقتاً)
+	avPath := filepath.Join(workDir, "av.m4a")
+	silentVideo := filepath.Join(workDir, "silent.mp4")
+	if err := muxAV(concatPath, in.VoicePath, silentVideo, avPath); err != nil {
+		return Output{}, fmt.Errorf("mux: %w", err)
+	}
+
+	// ── 4️⃣ موسيقى خلفية هادئة 15%
+	musicTrack := music.Pick(in.MusicEmotion)
+	finalPath := fmt.Sprintf("output/final_%d.mp4", in.VideoID)
+
+	if musicTrack != "" {
+		mixedAudio := filepath.Join(workDir, "mixed.m4a")
+		if err := music.MixWithVoice(avPath, musicTrack, mixedAudio, voiceDur); err == nil {
+			if err := muxAV(concatPath, mixedAudio, silentVideo, finalPath); err == nil {
+				fmt.Printf("   🎬 RENDERED (with music): %s\n", finalPath)
+				return Output{VideoPath: finalPath, ThumbPath: in.ThumbPath, Duration: voiceDur}, nil
+			}
+		}
+		// فشلت الموسيقى → النسخة بدونها
+	}
+
+	if err := copyFile(silentVideo, finalPath); err != nil {
+		return Output{}, fmt.Errorf("finalize: %w", err)
+	}
+	fmt.Printf("   🎬 RENDERED: %s\n", finalPath)
+	return Output{VideoPath: finalPath, ThumbPath: in.ThumbPath, Duration: voiceDur}, nil
+}
+
+// ══════════════════════════════════════════
+// 🖼️ buildSlideshow — صور المشاهد → فيديو متدرج
+// ══════════════════════════════════════════
+
+func buildSlideshow(scenes []Scene, totalDur float64, workDir string) (string, error) {
+
+	// توزيع المدة بالتساوي لو المدد فارغة
+	per := totalDur / float64(len(scenes))
+	if per < 3 {
+		per = 3
+	}
+
+	// تحويل كل صورة لمقطع بنفس القياس
+	var parts []string
+	for i, sc := range scenes {
+		if sc.ImagePath == "" || !fileExists(sc.ImagePath) {
+			continue
+		}
+		partPath := filepath.Join(workDir, fmt.Sprintf("part_%02d.mp4", i))
+		dur := sc.Duration
+		if dur <= 0 {
+			dur = per
+		}
+		cmd := exec.Command("ffmpeg", "-y",
+			"-loop", "1", "-i", sc.ImagePath,
+			"-t", fmt.Sprintf("%.2f", dur),
+			"-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25",
+			"-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast",
+			partPath)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("part %d: %v: %s", i, err, lastLine(string(b)))
+		}
+		parts = append(parts, partPath)
+	}
+
+	if len(parts) == 0 {
+		return "", fmt.Errorf("لا توجد صور صالحة للمشاهد")
+	}
+
+	// دمج المقاطع concat
+	listPath := filepath.Join(workDir, "parts.txt")
+	lf, _ := os.Create(listPath)
+	for _, p := range parts {
+		lf.WriteString("file '" + p + "'\n")
+	}
+	lf.Close()
+
+	concatPath := filepath.Join(workDir, "slideshow.mp4")
+	cmd := exec.Command("ffmpeg", "-y",
+		"-f", "concat", "-safe", "0", "-i", listPath,
+		"-c", "copy", concatPath)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("concat: %v: %s", err, lastLine(string(b)))
+	}
+	return concatPath, nil
+}
+
+// ══════════════════════════════════════════
+// 🔊 muxAV — صور + صوت → MP4 نهائي
+// ══════════════════════════════════════════
+
+func muxAV(videoPath, audioPath, silentOut, finalOut string) error {
+
+	// فيديو صامت (صور فقط) — يُنتج مرة
+	if !fileExists(silentOut) {
+		cmd := exec.Command("ffmpeg", "-y",
+			"-i", videoPath, "-an",
+			"-c:v", "copy", silentOut)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%v: %s", err, lastLine(string(b)))
 		}
 	}
-	fmt.Printf("🎞️ VIDEO %d: %d elite clips ready\n", id, len(clipPaths))
 
-	// ---- 2) الموسيقى: مقدمة حماسية + خلفية هادئة مريحة ----
-	introTrack := music.Pick(true)
-	mainTrack := music.Pick(false)
-	introPath := fmt.Sprintf("music_cache/intro_%d.mp3", id)
-	mainPath := fmt.Sprintf("music_cache/main_%d.mp3", id)
-	music.Download(introTrack, introPath)
-	music.Download(mainTrack, mainPath)
-
-	// ---- 3) المقدمة: 7 ثوانٍ من أقوى لقطة + موسيقى حماسية ----
-	introOut := fmt.Sprintf("output/intro_%d.mp4", id)
-	buildIntro(clipPaths[0], introPath, introOut)
-
-	// ---- 4) الجسم: 15 أو 30 دقيقة حسب رقم الفيديو ----
-	targetMin := 15
-	if id%2 == 0 {
-		targetMin = 30 // نُوزّع: فيديوهات زوجية 30 دقيقة، فردية 15
+	// دمج الصوت
+	cmd := exec.Command("ffmpeg", "-y",
+		"-i", silentOut, "-i", audioPath,
+		"-map", "0:v", "-map", "1:a",
+		"-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+		"-shortest", finalOut)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%v: %s", err, lastLine(string(b)))
 	}
-
-	err := buildMain(clipPaths, mainPath, out, targetMin)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("🎬 VIDEO %d RENDERED (%d min target) in %.0fs\n",
-		id, targetMin, time.Since(start).Seconds())
 	return nil
 }
 
-// cinematicQueries: جمل بحث سينمائية — تتغير حسب id حتى يختلف كل فيديو
-func cinematicQueries(id int) []string {
-	pool := [][]string{
-		{"money falling slow motion", "gold coins macro", "luxury watch closeup"},
-		{"city skyline aerial night", "businessman walking city", "office skyscraper glass"},
-		{"stock market screen", "cash counting machine", "credit card luxury"},
-		{"drone ocean coast", "supercar driving night", "penthouse interior luxury"},
+// ══════════════════════════════════════════
+// helpers
+// ══════════════════════════════════════════
+
+// audioDuration: قراءة مدة الصوت عبر ffprobe
+func audioDuration(path string) (float64, error) {
+	out, err := exec.Command("ffprobe",
+		"-v", "error", "-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1", path).Output()
+	if err != nil {
+		return 0, err
 	}
-	return pool[id%len(pool)]
+	return strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
 }
 
-// buildIntro: مقدمة 7 ثوانٍ (175 إطار × 25fps) بتكبير سينمائي بطيء
-func buildIntro(bestClip, musicPath, outPath string) {
-	cmd := exec.Command("melt",
-		bestClip+" in=0 out=175",
-		"audio="+musicPath,
-		"-consumer", "avformat:"+outPath,
-		"vcodec=libx264", "preset=fast", "crf=20", "threads=0",
-		"acodec=aac", "ab=192k", "pix_fmt=yuv420p")
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("⚠️ INTRO skipped: %v\n", err)
-	} else {
-		fmt.Println("🎬 INTRO 7s DONE")
-	}
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
 }
 
-// buildMain: جسم الفيديو — يلف المقاطع النخبوية دوريًا حتى يصل للمدة المطلوبة
-func buildMain(clips []string, musicPath, outPath string, targetMin int) error {
-	seconds := targetMin * 60
-	framesPerClip := 12 * 25 // 12 ثانية لكل مقطع × 25fps
-	totalNeeded := (seconds / 12) + 1
-
-	args := []string{}
-
-	// نكرر المقاطع دوريًا حتى نغطي المدة (15 دقيقة ≈ 75 مقطعًا / 30 دقيقة ≈ 150)
-	for i := 0; i < totalNeeded; i++ {
-		c := clips[i%len(clips)]
-		in := (i / len(clips)) * framesPerClip // إزاحة داخل المقطع حتى لا يتكرر نفس الجزء
-		args = append(args, fmt.Sprintf("%s in=%d out=%d", c, in, in+framesPerClip))
+func copyFile(src, dst string) error {
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
 	}
-
-	// موسيقى هادئة خافتة تحت الفيديو
-	args = append(args, "track=1", "audio="+musicPath, "mix=-17dB")
-
-	args = append(args,
-		"-consumer", "avformat:"+outPath,
-		"vcodec=libx264", "preset=medium", "crf=22", "threads=0",
-		"acodec=aac", "ab=192k", "pix_fmt=yuv420p",
-	)
-
-	cmd := exec.Command("melt", args...)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	fmt.Printf("🎬 MAIN BUILD: %d segments → %s (%d min)\n",
-		totalNeeded, filepath.Base(outPath), targetMin)
-	return cmd.Run()
+	return os.WriteFile(dst, b, 0644)
 }
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[len(lines)-1]
+}
+
+// LastVideoPath: آخر فيديو نهائي جاهز
+func LastVideoPath() string {
+	matches, _ := filepath.Glob("output/final_*.mp4")
+	if len(matches) > 0 {
+		return matches[len(matches)-1]
+	}
+	return ""
+}
+
+// _ استيراد thumbs لضمان التوافق (لو لم يُستخدم احذف هذا السطر والاستيراد)
+var _ = thumbs.SmartGenerate
