@@ -24,6 +24,9 @@ jobs:
         with:
           go-version: '1.22'
 
+      # ============================================================
+      # 🧰 أدوات أساسية — ffmpeg + edge-tts
+      # ============================================================
       - name: 🧰 Install Tools (ffmpeg + edge-tts)
         run: |
           sudo apt-get update -qq
@@ -32,6 +35,9 @@ jobs:
           which ffmpeg
           which edge-tts
 
+      # ============================================================
+      # 🔑 بيانات الاعتماد
+      # ============================================================
       - name: 🔑 Write Credentials
         run: |
           mkdir -p credentials secrets
@@ -43,7 +49,7 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       # ============================================================
-      # 🔊 Piper TTS — الحزمة الكاملة (بال مكتباتها + espeak)
+      # 🔊 Piper TTS — الحزمة الكاملة (بالمكتبات + espeak-data)
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
         run: |
@@ -53,31 +59,75 @@ jobs:
           sudo rm -rf /opt/piper
           sudo mv piper /opt/piper
           sudo ln -sf /opt/piper/piper /usr/local/bin/piper
-          echo "📦 محتويات الحزمة:"
-          ls -la /opt/piper/
           echo "✅ piper bundle installed (libs + espeak-data داخلها)"
 
       # ============================================================
-      # 🎙️ موديلات الأصوات — مطابقة لأسماء tts.go بالضبط
+      # 🎙️ موديلات صوتية ترقية 2025 — أفضل الأصوات مفتوحة المصدر
+      #    مرايا متعددة + تحقق ذكي + fallback سحابي يغطي أي ناقص
       # ============================================================
-      - name: 🎙️ Download All Voice Models
+      - name: 🎙️ Download Premium Voice Models
         run: |
           mkdir -p models
-          HF="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+          MIRRORS=(
+            "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+            "https://hf-mirror.com/rhasspy/piper-voices/resolve/main"
+          )
           download() {
-            curl -sL "HF/HF/HF/1.onnx" -o "models/(basename(basename(basename1).onnx"
-            curl -sL "HF/HF/HF/1.onnx.json" -o "models/(basename(basename(basename1).onnx.json"
-            echo "  ✅ (basename(basename(basename1).onnx"
+            local NAME=(basename(basename(basename1)
+            [ -s "models/NAME.onnx" ] && SIZE=(stat -c%s "models/$NAME.onnx") && \
+              [ "SIZE" -gt 1000000 ] && { echo "  ⏭️NAME موجود مسبقاً"; return 0; }
+            for SRC in "${MIRRORS[@]}"; do
+              curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
+                "SRC/SRC/SRC/1.onnx" -o "models/$NAME.onnx"
+              curl -4 -sL --retry 5 --retry-delay 3 --connect-timeout 20 \
+                "SRC/SRC/SRC/1.onnx.json" -o "models/$NAME.onnx.json"
+              SIZE=(stat−c(stat -c%s "models/(stat−cNAME.onnx" 2>/dev/null || echo 0)
+              if [ "$SIZE" -gt 1000000 ]; then
+                echo "  ✅ NAME.onnx(NAME.onnx (NAME.onnx(((SIZE/1024/1024))MB)"
+                return 0
+              fi
+              rm -f "models/$NAME.onnx"
+              echo "  ⚠️ فشل من $SRC"
+            done
+            echo "  🔁 $NAME — سيُستخدم البديل السحابي edge-tts لهذه اللغة"
+            return 0   # لا يوقف الباقي — edge-tts يغطيه
           }
+          # العاشر عربياً — كريم الأردني (أفضل صوت عربي في piper)
           download "ar/ar_JO/kareem/medium/ar_JO-kareem-medium"
+          # الإنجليزية الأمريكية — ريان (studio quality)
           download "en/en_US/ryan/high/en_US-ryan-high"
+          # الإسبانية — carlfm
           download "es/es_ES/carlfm/x_low/es_ES-carlfm-x-low"
+          # التركية — فخر الدين
           download "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium"
+          # الفرنسية — سيميس (أوروبا الغربية)
+          download "fr/fr_FR/siwis/low/fr_FR-siwis-low"
+          # الألمانية — إيفا كي (أوروبا الوسطى)
+          download "de/de_DE/eva_k-x_low/de_DE-eva_k-x-low"
+          echo ""
           echo "📁 models/ النهائي:"
           ls -la models/
 
       # ============================================================
-      # البناء
+      # 🌐 خريطة أصوات edge-tts العصبية الاحتياطية
+      # ============================================================
+      - name: 🌐 Configure Edge-TTS Fallback
+        run: |
+          mkdir -p voices_fallback
+          cat > voices_fallback/map.json << 'EOF'
+          {
+            "ar": "ar-SA-HamedNeural",
+            "en": "en-US-GuyNeural",
+            "es": "es-ES-AlvaroNeural",
+            "tr": "tr-TR-AhmetNeural",
+            "fr": "fr-FR-HenriNeural",
+            "de": "de-DE-ConradNeural"
+          }
+          EOF
+          echo "✅ خريطة edge-tts الاحتياطية جاهزة"
+
+      # ============================================================
+      # 🔨 البناء
       # ============================================================
       - name: Build Engine
         run: |
@@ -87,7 +137,7 @@ jobs:
           echo "✅ BUILD OK"
 
       # ============================================================
-      # الإنتاج الكامل — مع مسار مكتبات piper
+      # 🔥 الإنتاج الكامل
       # ============================================================
       - name: 🔥 GOD Production Run
         run: |
@@ -99,7 +149,7 @@ jobs:
           PIPER_PATH: /opt/piper/piper
 
       # ============================================================
-      # أرشفة النتائج (حتى لو فشل جزئياً)
+      # 📦 أرشفة النتائج
       # ============================================================
       - name: 📦 Archive Videos
         if: always()
