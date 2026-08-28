@@ -1,0 +1,186 @@
+[
+ {
+  "time": "2026-08-28 12:36",
+  "file": "3_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 64,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "1_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "4_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "2_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "2_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 44,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "1_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 33,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "4_ar.wav",
+  "lang": "ar",
+  "engine": "piper",
+  "score": 37,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:37",
+  "file": "3_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:38",
+  "file": "1_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:39",
+  "file": "4_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:39",
+  "file": "3_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:39",
+  "file": "2_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:40",
+  "file": "1_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:40",
+  "file": "4_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:40",
+  "file": "3_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:41",
+  "file": "2_en.wav",
+  "lang": "en",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:41",
+  "file": "1_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:41",
+  "file": "3_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:41",
+  "file": "4_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:42",
+  "file": "1_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:42",
+  "file": "2_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 0
+ },
+ {
+  "time": "2026-08-28 12:42",
+  "file": "4_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ },
+ {
+  "time": "2026-08-28 12:43",
+  "file": "2_es.wav",
+  "lang": "es",
+  "engine": "piper",
+  "score": 0,
+  "retries": 1
+ }
+]
