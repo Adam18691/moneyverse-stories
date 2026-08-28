@@ -28,14 +28,14 @@ jobs:
           go-version: '1.22'
 
       # ============================================================
-      # 🧰 أدوات أساسية — ffmpeg + edge-tts + Whisper
+      # 🧰 أدوات أساسية + faster-whisper int8 (بدل whisper الثقيل)
       # ============================================================
-      - name: 🧰 Install Tools (ffmpeg + edge-tts + whisper)
+      - name: 🧰 Install Tools (ffmpeg + edge-tts + faster-whisper)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           pip install --upgrade edge-tts --quiet
-          pip install openai-whisper --quiet
+          pip install faster-whisper --quiet
           which ffmpeg
           which edge-tts
 
@@ -51,7 +51,62 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       # ============================================================
-      # 🗣️ Piper TTS — المحرك الموحد لكل اللغات
+      # 🔊 RNNoise — إزالة ضوضاء عصبية بحجم 2MB فقط
+      # ============================================================
+      - name: 🔊 Install RNNoise (2MB magic)
+        run: |
+          mkdir -p models
+          curl -4 -sL --retry 3 --connect-timeout 20 \
+            "https://raw.githubusercontent.com/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/shr.wavenet_.rnnn" \
+            -o models/std.rnnn
+          SIZE=$(stat -c%s models/std.rnnn 2>/dev/null || echo 0)
+          if [ "$SIZE" -gt 100000 ]; then
+            echo "OK models/std.rnnn $SIZE bytes — RNNoise مفعّل"
+          else
+            rm -f models/std.rnnn
+            echo "WARN rnnoise فشل — التحسين سيعمل بدون إزالة ضوضاء"
+          fi
+
+      # ============================================================
+      # 🥇 Kokoro ONNX — استوديو بـ 88MB بدل 300MB
+      # ============================================================
+      - name: 🥇 Install Kokoro-ONNX (88MB studio)
+        run: |
+          pip install kokoro-onnx soundfile --quiet
+          curl -4 -sL --retry 3 --connect-timeout 30 \
+            "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/kokoro-v1.0.onnx" \
+            -o models/kokoro-v1.0.onnx
+          curl -4 -sL --retry 3 --connect-timeout 30 \
+            "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/voices-v1.0.bin" \
+            -o models/kokoro-v1.0-voices.bin
+          S1=$(stat -c%s models/kokoro-v1.0.onnx 2>/dev/null || echo 0)
+          S2=$(stat -c%s models/kokoro-v1.0-voices.bin 2>/dev/null || echo 0)
+          if [ "S1" -gt 50000000 ] && [ "S2" -gt 1000000 ]; then
+            echo "OK kokoro-onnx (S1+S1 +S1+S2 bytes) — استوديو 88MB"
+          else
+            echo "WARN kokoro-onnx ناقص — piper يغطي الإنجليزية"
+          fi
+
+      # ============================================================
+      # 🐱 KittenTTS — 25MB أسرع محرك TTS على CPU
+      # ============================================================
+      - name: 🐱 Install KittenTTS (25MB rocket)
+        run: |
+          pip install kittentts soundfile --quiet || echo "kitten skipped"
+          python3 -c "from kittentts import KittenTTS; print('kitten-25MB ready')" || echo "kitten failed - kokoro covers"
+
+      # ============================================================
+      # 🎭 Bark — الذخيرة الإخراجية (موديلات صغيرة + offload)
+      # ============================================================
+      - name: 🎭 Install Bark (dramatic voice reserve)
+        run: |
+          pip install suno-bark scipy --quiet
+          python3 -c "import bark; print('bark ready')" || echo "bark failed - piper covers"
+        env:
+          SUNO_USE_SMALL_MODELS: '1'
+
+      # ============================================================
+      # 🗣️ Piper TTS — المحرك الموحد
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
         run: |
@@ -61,12 +116,12 @@ jobs:
           sudo rm -rf /opt/piper
           sudo mv piper /opt/piper
           sudo ln -sf /opt/piper/piper /usr/local/bin/piper
-          echo "piper bundle installed"
+          echo "✅ piper bundle installed"
 
       # ============================================================
-      # 🎙️ موديلات Piper — حلقة تحميل بلا دوال (آمنة لأي shell)
+      # 🌍 موديلات Piper — 12 لغة كاملة (6 أساسية + 6 جديدة)
       # ============================================================
-      - name: 🎙️ Download Piper Voice Models
+      - name: 🌍 Download Piper Models (12 languages)
         run: |
           mkdir -p models
           BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
@@ -83,12 +138,24 @@ jobs:
           fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx.json 2000
           de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx 20000000
           de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx.json 2000
+          ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx 50000000
+          ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx.json 2000
+          ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx 50000000
+          ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json 2000
+          id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx 50000000
+          id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx.json 2000
+          hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx 50000000
+          hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json 2000
+          pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx 50000000
+          pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json 2000
+          it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx 20000000
+          it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json 2000
           "
           echo "$LIST" | while read REL MIN; do
             [ -z "$REL" ] && continue
             OUT="models/(basename(basename(basenameREL)"
             OK=0
-            for i in 1 2 3 4 5; do
+            for i in 1 2 3; do
               curl -4 -sL --retry 3 --connect-timeout 20 "BASE/BASE/BASE/REL" -o "$OUT"
               SIZE=(stat−c(stat -c%s "(stat−cOUT" 2>/dev/null || echo 0)
               if [ "SIZE"−gt"SIZE" -gt "SIZE"−gt"MIN" ]; then
@@ -96,16 +163,14 @@ jobs:
                 OK=1
                 break
               fi
-              echo "RETRY OUTsize=OUT size=OUTsize=SIZE try=$i"
-              sleep 10
+              echo "RETRY OUTtry=OUT try=OUTtry=i"
+              sleep 5
             done
             if [ "$OK" = "0" ]; then
-              echo "FAIL $OUT"
+              echo "WARN $OUT — سيُتخطى تلقائياً وقت التشغيل"
+              rm -f "$OUT"
             fi
           done
-          echo "=== JSON check — first 30 chars ==="
-          head -c 30 models/*.json
-          echo ""
 
       # ============================================================
       # 🔨 البناء
@@ -115,10 +180,10 @@ jobs:
           go mod tidy
           go vet ./... || true
           go build -o god-engine .
-          echo "BUILD OK"
+          echo "✅ BUILD OK"
 
       # ============================================================
-      # 🔥 الإنتاج الكامل
+      # 🔥 الإنتاج الكامل — 12 لغة + كل الحزمة
       # ============================================================
       - name: 🔥 GOD Production Run
         run: |
@@ -128,6 +193,9 @@ jobs:
           CGO_ENABLED: '0'
           LD_LIBRARY_PATH: /opt/piper
           PIPER_PATH: /opt/piper/piper
+          SUNO_USE_SMALL_MODELS: '1'
+          SUNO_OFFLOAD_CPU: '1'
+          OMP_NUM_THREADS: '2'
 
       # ============================================================
       # 🔍 تشخيص + ذاكرة التعلم
@@ -135,14 +203,16 @@ jobs:
       - name: 🔍 Locate Output Files
         if: always()
         run: |
-          echo "=== mp4 files ==="
+          echo "=== mp4 ==="
           find . -name "*.mp4" -not -path "./models/*" -not -path "./.git/*" || true
-          echo "=== wav files ==="
+          echo "=== wav ==="
           find . -name "*.wav" -not -path "./models/*" -not -path "./.git/*" || true
-          echo "=== self-tune memory ==="
-          cat data/qa_config.json 2>/dev/null || echo "no self-tune config yet"
-          echo "=== root ==="
-          ls -la
+          echo "=== self-tune ==="
+          cat data/qa_config.json 2>/dev/null || echo "no config yet"
+          echo "=== daily report ==="
+          cat data/daily_report.json 2>/dev/null || echo "no report yet"
+          echo "=== disk usage ==="
+          du -sh models 2>/dev/null
 
       # ============================================================
       # 📦 أرشفة النتائج
@@ -167,5 +237,5 @@ jobs:
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "god-engine state + QA self-tune update [skip ci]"
+          commit_message: "god-engine v2.0 full-stack + 12 languages [skip ci]"
           file_pattern: "schedule/*.json data/*.json"
