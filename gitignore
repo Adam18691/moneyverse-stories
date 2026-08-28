@@ -1,0 +1,45 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+god-engine
+publish-engine
+
+# Directories
+/output/
+/audio/
+/thumbs/
+/subs/
+/scenes/
+/models/
+/data/
+/credentials/
+/secrets/
+
+# Sensitive files
+client_secret.json
+token.json
+*.key
+*.pem
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+*.prof
+*.out
+
+# Logs
+*.log
