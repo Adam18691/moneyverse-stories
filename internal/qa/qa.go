@@ -12,15 +12,6 @@ import (
 	"time"
 )
 
-// ══════════════════════════════════════════════════════
-// 🧠 QA v2.0 — أقصى احترافية على RAM مجاني (7GB):
-//    ⚡ faster-whisper int8   — فحص أخف 3x وأسرع 4x
-//    🔊 RNNoise (2MB)        — إزالة ضوضاء عصبية
-//    💾 مراقب RAM + GC قسري  — صفر انهيارات OOM
-//    📊 تقرير يومي + SelfTune — تراكم وتعلم مستمر
-// ══════════════════════════════════════════════════════
-
-// ─── 💾 مراقب RAM ───
 func RamFreeMB() int {
 	b, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
@@ -36,27 +27,23 @@ func RamFreeMB() int {
 	return 9999
 }
 
-// ─── 🧹 تفريغ كامل للذاكرة ───
 func FreeMemory() {
 	runtime.GC()
 	debug.FreeOSMemory()
 }
 
 func RamStatus() string {
-	return fmt.Sprintf("💾 RAM متاح: %dMB", RamFreeMB())
+	return fmt.Sprintf("RAM متاح: %dMB", RamFreeMB())
 }
 
-// ─── ⚡ فحص AI عبر faster-whisper int8 ───
 func CheckAudio(audioPath, originalText string) (int, error) {
 	if _, err := os.Stat(audioPath); err != nil {
 		return 0, fmt.Errorf("لا يوجد ملف صوتي")
 	}
-
 	if RamFreeMB() < 1500 {
-		fmt.Println("   ⚡ RAM ضيق — تخطي الفحص (اعتماد افتراضي)")
+		fmt.Println("   RAM ضيق — تخطي الفحص")
 		return 100, nil
 	}
-
 	py := fmt.Sprintf(`
 import json, warnings
 warnings.filterwarnings("ignore")
@@ -72,45 +59,38 @@ except Exception as e:
 
 	out, err := exec.Command("python3", "-c", py).CombinedOutput()
 	if err != nil {
-		fmt.Println("   ⚠️ faster-whisper غير متاح — تخطي الفحص")
+		fmt.Println("   faster-whisper غير متاح — تخطي الفحص")
 		return 100, nil
 	}
-
 	var res struct {
 		Text  string `json:"text"`
 		Error string `json:"error"`
 	}
 	json.Unmarshal(out, &res)
 	if res.Error != "" {
-		fmt.Printf("   ⚠️ فحص: %s — تخطي\n", short(res.Error, 60))
 		return 100, nil
 	}
-
 	score := similarity(originalText, res.Text)
-	fmt.Printf("   ⚡ فحص AI: تطابق %d%% %s\n", score, RamStatus())
+	fmt.Printf("   فحص AI: تطابق %d%% | %s\n", score, RamStatus())
 	return score, nil
 }
 
-// ─── ✨ التحسين: RNNoise (إن وجد) + loudnorm ───
 func Enhance(audioPath string) error {
 	tmp := audioPath + ".tmp.wav"
-
 	af := "loudnorm=I=-16:TP=-1.5:LRA=11"
 	if _, err := os.Stat("models/std.rnnn"); err == nil {
 		af = "arnndn=m=models/std.rnnn," + af
-		fmt.Println("   🔊 RNNoise: إزالة ضوضاء مفعّلة")
+		fmt.Println("   RNNoise مفعّل")
 	}
-
-	cmd := exec.Command("ffmpeg", "-y", "-i", audioPath,
-		"-af", af, "-ar", "24000", tmp)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := exec.Command("ffmpeg", "-y", "-i", audioPath, "-af", af, "-ar", "24000", tmp).CombinedOutput()
+	if err != nil {
+		fmt.Printf("   ffmpeg: %s\n", string(out))
 		os.Remove(tmp)
-		return fmt.Errorf("loudnorm: %v", err)
+		return fmt.Errorf("enhance failed")
 	}
 	return os.Rename(tmp, audioPath)
 }
 
-// ─── 📊 السجل التراكمي ───
 type QARecord struct {
 	Time    string `json:"time"`
 	File    string `json:"file"`
@@ -150,13 +130,8 @@ func LogRecord(file, lang, engine string, score, retries int) {
 	if len(log) > 500 {
 		log = log[len(log)-500:]
 	}
-	if b, _ := json.MarshalIndent(log, "", "  "); b != nil {
+	if b, _ := json.MarshalIndent(log, "", " "); b != nil {
 		os.WriteFile("data/qa.json", b, 0644)
-	}
-
-	avg, n := average(log, 20)
-	if n >= 5 {
-		fmt.Printf("   📈 متوسط آخر %d: %d%% (عتبة %d%%)\n", n, avg, Threshold())
 	}
 	writeDailyReport(log)
 	selfTune(log)
@@ -170,7 +145,6 @@ type engineStat struct {
 func writeDailyReport(log []QARecord) {
 	today := time.Now().UTC().Format("2006-01-02")
 	engines := map[string]engineStat{}
-
 	for _, r := range log {
 		if !strings.HasPrefix(r.Time, today) {
 			continue
@@ -180,14 +154,12 @@ func writeDailyReport(log []QARecord) {
 		s.Avg = s.Avg*float64(s.Count-1)/float64(s.Count) + float64(r.Score)/float64(s.Count)
 		engines[r.Engine] = s
 	}
-
 	report := struct {
 		Date    string                `json:"date"`
 		RamFree int                   `json:"ram_free_mb"`
 		Engines map[string]engineStat `json:"engines"`
 	}{today, RamFreeMB(), engines}
-
-	if b, _ := json.MarshalIndent(report, "", "  "); b != nil {
+	if b, _ := json.MarshalIndent(report, "", " "); b != nil {
 		os.WriteFile("data/daily_report.json", b, 0644)
 	}
 }
@@ -199,20 +171,20 @@ func selfTune(log []QARecord) {
 	}
 	current := Threshold()
 	newT := current
-	switch {
-	case avg >= 85 && current < 85:
+	if avg >= 85 && current < 85 {
 		newT = current + 5
-	case avg < 65 && current > 45:
+	}
+	if avg < 65 && current > 45 {
 		newT = current - 5
 	}
 	if newT != current {
 		cfg := struct {
 			Threshold int `json:"threshold"`
 		}{newT}
-		if b, _ := json.MarshalIndent(cfg, "", "  "); b != nil {
+		if b, _ := json.MarshalIndent(cfg, "", " "); b != nil {
 			os.WriteFile("data/qa_config.json", b, 0644)
 		}
-		fmt.Printf("   🔄 SELF-TUNE: %d%% → %d%%\n", current, newT)
+		fmt.Printf("   SELF-TUNE: %d الى %d\n", current, newT)
 	}
 }
 
@@ -237,7 +209,7 @@ func average(log []QARecord, n int) (int, int) {
 
 func similarity(a, b string) int {
 	aw, bw := strings.Fields(lower(a)), strings.Fields(lower(b))
-	if len(bw) == 0 {
+	if len(aw) == 0 || len(bw) == 0 {
 		return 0
 	}
 	match := map[string]bool{}
@@ -264,12 +236,4 @@ func lower(s string) string {
 		}
 	}
 	return string(out)
-}
-
-func short(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n]) + "..."
-	}
-	return s
 }
