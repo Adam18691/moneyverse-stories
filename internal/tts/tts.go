@@ -11,12 +11,9 @@ import (
 )
 
 // ══════════════════════════════════════════════════════
-// 🎙️ المحرك v2.0 النهائي — أقصى استغلال للـ RAM المجاني:
-//    🐱 KittenTTS 25MB   — الإنجليزية الأولى (150MB)
-//    🥇 Kokoro ONNX      — استوديو بحجم 88MB (300MB RAM)
-//    🔵 Piper ×12 لغة    — الأساس (150-300MB)
-//    🎭 Bark small       — ذخيرة درامية (بوابة ≥3GB)
-//    💾 GC بعد كل فيديو + وضع طوارئ piper-only
+// 🎙️ المحرك v2.0 — سلسلة ذكية ببوابات RAM:
+//    🐱 KittenTTS (إنجليزي) → 🥇 Kokoro ONNX → 🔵 Piper
+//    → 🎭 Bark (ذخيرة ببوابة ≥3GB) + وضع طوارئ piper-only
 // ══════════════════════════════════════════════════════
 
 // ─── 🔌 الواجهة لـ main.go ───
@@ -25,7 +22,6 @@ func Narrate(text, lang, outPath string) error {
 	return Generate(text, lang, outPath)
 }
 
-// NarrateDramatic: للمقدمة/الذروة — bark فقط عند RAM كافية
 func NarrateDramatic(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
 
@@ -58,7 +54,7 @@ func DubAllLanguages(langs map[string]string, id int) map[string]string {
 	return dubs
 }
 
-// ─── 🔵 Piper — 12 لغة (الموجود يعمل، الغائب يقفز تلقائياً) ───
+// ─── 🔵 Piper — 12 لغة (الغائب يقفز تلقائياً) ───
 var piperModels = map[string]string{
 	"ar": "models/ar_JO-kareem-medium",
 	"en": "models/en_US-ryan-high",
@@ -80,11 +76,6 @@ var barkVoices = map[string]string{
 	"fr": "v2/fr_speaker_1", "de": "v2/de_speaker_3",
 }
 
-// ══════════════════════════════════════════════════════
-// 🎛️ Generate — سلسلة تقرر حسب RAM لحظياً:
-//    <1.5GB : piper فقط بلا فحص (وضع الطوارئ)
-//    ≥1.5GB : kitten/kokoro → piper → bark
-// ══════════════════════════════════════════════════════
 func Generate(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
 
@@ -101,7 +92,7 @@ func Generate(text, lang, outPath string) error {
 			continue
 		}
 
-		// 🐱/🥇 الإنجليزية: kitten (أخف) → kokoro-onnx (أجمل)
+		// 🐱/🥇 الإنجليزية: kitten → kokoro-onnx
 		if strings.HasPrefix(lang, "en") {
 			if err := kittenTTS(text, outPath); err == nil {
 				if finalize(outPath, text, lang, "kitten", attempt) {
@@ -114,14 +105,14 @@ func Generate(text, lang, outPath string) error {
 			}
 		}
 
-		// 🔵 piper — الأساس لكل الـ 12 لغة
+		// 🔵 piper — الأساس
 		if err := piperGenerate(text, lang, outPath); err != nil {
 			fmt.Printf("   ⚠️ piper [%s]: %v → bark\n", lang, err)
 		} else if finalize(outPath, text, lang, "piper", attempt) {
 			return nil
 		}
 
-		// 🎭 bark — الذخيرة (بوابة RAM داخل الدالة)
+		// 🎭 bark — الذخيرة (بوابة داخل الدالة)
 		if err := barkTTS(text, lang, outPath); err == nil {
 			if finalize(outPath, text, lang, "bark", attempt) {
 				fmt.Println("   🎭 bark أنقذ الجولة!")
@@ -143,7 +134,6 @@ func finalize(outPath, text, lang, engine string, attempt int) bool {
 	return score >= qa.Threshold()
 }
 
-// ─── 🐱 KittenTTS — 25MB ───
 func kittenTTS(text, outPath string) error {
 	py := fmt.Sprintf(`
 import warnings; warnings.filterwarnings("ignore")
@@ -159,8 +149,10 @@ sf.write(%q, audio, 24000)
 	return fileOK(outPath)
 }
 
-// ─── 🥇 Kokoro ONNX — 88MB (بدل 300MB PyTorch) ───
 func kokoroTTS(text, outPath string) error {
+	if _, err := os.Stat("models/kokoro-v1.0.onnx"); err != nil {
+		return fmt.Errorf("kokoro-onnx غير مثبت")
+	}
 	py := fmt.Sprintf(`
 import warnings; warnings.filterwarnings("ignore")
 from kokoro_onnx import Kokoro
@@ -175,7 +167,6 @@ sf.write(%q, audio, sr)
 	return fileOK(outPath)
 }
 
-// ─── 🔵 Piper ───
 func piperGenerate(text, lang, outPath string) error {
 	model, ok := piperModels[lang]
 	if !ok {
@@ -202,7 +193,6 @@ func piperGenerate(text, lang, outPath string) error {
 	return fileOK(outPath)
 }
 
-// ─── 🎭 Bark small — بوابة RAM ≥3GB ───
 func barkTTS(text, lang, outPath string) error {
 	if qa.RamFreeMB() < 3000 {
 		return fmt.Errorf("RAM غير كافية لـ bark (%dMB)", qa.RamFreeMB())
