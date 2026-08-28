@@ -17,6 +17,9 @@ jobs:
   god-run:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +126,7 @@ jobs:
           PIPER_PATH: /opt/piper/piper
 
       # ============================================================
-      # 🔍 تشخيص — أين الفيديوهات فعلياً؟
+      # 🔍 تشخيص — أين الفيديوهات فعلياً؟ + ذاكرة التعلم
       # ============================================================
       - name: 🔍 Locate Output Files
         if: always()
