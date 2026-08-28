@@ -103,9 +103,22 @@ func Generate(text, lang, outPath string) error {
 	return fmt.Errorf("كل المحركات فشلت %s", lang)
 }
 
+// finalize v2.2 — يتحقق من صحة الملف قبل التحسين، ويرفض التالف فوراً
 func finalize(outPath, text, lang, engine string, attempt int) bool {
+	st, err := os.Stat(outPath)
+	if err != nil || st.Size() < 10000 {
+		fmt.Printf("   ملف تالف/صغير — رفض [%s]\n", lang)
+		os.Remove(outPath)
+		return false
+	}
+	chk, _ := exec.Command("ffprobe", "-v", "error", outPath).CombinedOutput()
+	if len(chk) > 0 {
+		fmt.Printf("   ملف غير صالح — رفض [%s]: %s\n", lang, lastLine(string(chk)))
+		os.Remove(outPath)
+		return false
+	}
 	if err := qa.Enhance(outPath); err != nil {
-		fmt.Printf("   تحسين فشل: %v\n", err)
+		fmt.Printf("   تحسين فشل (الملف الأصلي محفوظ): %v\n", err)
 	} else {
 		fmt.Printf("   enhanced | %s\n", qa.RamStatus())
 	}
