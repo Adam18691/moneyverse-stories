@@ -20,7 +20,7 @@ import (
 //    📊 تقرير يومي + SelfTune — تراكم وتعلم مستمر
 // ══════════════════════════════════════════════════════
 
-// ─── 💾 مراقب RAM — المتاح بالميجابايت ───
+// ─── 💾 مراقب RAM ───
 func RamFreeMB() int {
 	b, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
@@ -36,10 +36,10 @@ func RamFreeMB() int {
 	return 9999
 }
 
-// ─── 🧹 تفريغ كامل للذاكرة — يُستدعى بعد كل فيديو ───
+// ─── 🧹 تفريغ كامل للذاكرة ───
 func FreeMemory() {
 	runtime.GC()
-	debug.FreeOSMemory() // يعيد الذاكرة للنظام فعلياً
+	debug.FreeOSMemory()
 }
 
 func RamStatus() string {
@@ -52,7 +52,6 @@ func CheckAudio(audioPath, originalText string) (int, error) {
 		return 0, fmt.Errorf("لا يوجد ملف صوتي")
 	}
 
-	// 💾 بوابة RAM: تحت 1500MB = تخطٍ ذكي
 	if RamFreeMB() < 1500 {
 		fmt.Println("   ⚡ RAM ضيق — تخطي الفحص (اعتماد افتراضي)")
 		return 100, nil
@@ -134,7 +133,6 @@ func Threshold() int {
 	return t
 }
 
-// LogRecord: تسجيل + تقرير يومي + SelfTune
 func LogRecord(file, lang, engine string, score, retries int) {
 	os.MkdirAll("data", 0755)
 	var log []QARecord
@@ -164,7 +162,6 @@ func LogRecord(file, lang, engine string, score, retries int) {
 	selfTune(log)
 }
 
-// ─── 📊 التقرير اليومي ───
 type engineStat struct {
 	Count int     `json:"count"`
 	Avg   float64 `json:"avg_score"`
@@ -195,7 +192,6 @@ func writeDailyReport(log []QARecord) {
 	}
 }
 
-// ─── 🔄 SelfTune — عتبة ديناميكية من ذاكرة التعلم ───
 func selfTune(log []QARecord) {
 	avg, n := average(log, 30)
 	if n < 10 {
