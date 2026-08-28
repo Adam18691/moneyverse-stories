@@ -10,13 +10,7 @@ import (
 	"tayyibat-money/internal/qa"
 )
 
-// ══════════════════════════════════════════════════════
-// 🎙️ المحرك v2.0 — سلسلة ذكية ببوابات RAM:
-//    🐱 KittenTTS (إنجليزي) → 🥇 Kokoro ONNX → 🔵 Piper
-//    → 🎭 Bark (ذخيرة ببوابة ≥3GB) + وضع طوارئ piper-only
-// ══════════════════════════════════════════════════════
-
-// ─── 🔌 الواجهة لـ main.go ───
+// 🎙️ السلسلة: kitten → kokoro → piper → bark (ببوابات RAM)
 
 func Narrate(text, lang, outPath string) error {
 	return Generate(text, lang, outPath)
@@ -24,18 +18,14 @@ func Narrate(text, lang, outPath string) error {
 
 func NarrateDramatic(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
-
 	if qa.RamFreeMB() >= 3000 {
 		if err := barkTTS(text, lang, outPath); err == nil {
 			if err := qa.Enhance(outPath); err == nil {
-				fmt.Printf("   🎭 bark dramatic ⭐ %s\n", qa.RamStatus())
+				fmt.Printf("   bark dramatic | %s\n", qa.RamStatus())
 				qa.FreeMemory()
 				return nil
 			}
 		}
-		fmt.Println("   ⚠️ bark فشل → السلسلة العادية")
-	} else {
-		fmt.Printf("   💾 RAM %dMB < 3000 — تخطي bark (حماية)\n", qa.RamFreeMB())
 	}
 	return Generate(text, lang, outPath)
 }
@@ -45,7 +35,7 @@ func DubAllLanguages(langs map[string]string, id int) map[string]string {
 	for lang, script := range langs {
 		path := fmt.Sprintf("audio/%d_%s.wav", id, lang)
 		if err := Generate(script, lang, path); err != nil {
-			fmt.Printf("   ⚠️ dub [%s] فشل — تخطي: %v\n", lang, err)
+			fmt.Printf("   dub %s فشل — تخطي\n", lang)
 			continue
 		}
 		dubs[lang] = path
@@ -54,20 +44,16 @@ func DubAllLanguages(langs map[string]string, id int) map[string]string {
 	return dubs
 }
 
-// ─── 🔵 Piper — 12 لغة (الغائب يقفز تلقائياً) ───
+// 8 لغات مؤكدة — أسماء قصيرة مطابقة لليامل
 var piperModels = map[string]string{
-	"ar": "models/ar_JO-kareem-medium",
-	"en": "models/en_US-ryan-high",
-	"es": "models/es_ES-carlfm-x-low",
-	"tr": "models/tr_TR-fahrettin-medium",
-	"fr": "models/fr_FR-siwis-low",
-	"de": "models/de_DE-eva_k-x-low",
-	"ja": "models/ja_JP-thorsten-high",
-	"ru": "models/ru_RU-irina-medium",
-	"id": "models/id_ID-ardhi-medium",
-	"hi": "models/hi_IN-pratham-medium",
-	"pt": "models/pt_BR-faber-medium",
-	"it": "models/it_IT-riccardo-x_low",
+	"ar": "models/ar",
+	"en": "models/en",
+	"es": "models/es",
+	"tr": "models/tr",
+	"fr": "models/fr",
+	"de": "models/de",
+	"pt": "models/pt",
+	"it": "models/it",
 }
 
 var barkVoices = map[string]string{
@@ -79,12 +65,10 @@ var barkVoices = map[string]string{
 func Generate(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
 
-	const maxRetries = 2
-	for attempt := 1; attempt <= maxRetries; attempt++ {
+	for attempt := 1; attempt <= 2; attempt++ {
 
-		// ═══ وضع الطوارئ — صفر مخاطر ═══
 		if qa.RamFreeMB() < 1500 {
-			fmt.Printf("   💾 وضع الطوارئ %s — piper مباشر\n", qa.RamStatus())
+			fmt.Printf("   وضع الطوارئ | %s — piper مباشر\n", qa.RamStatus())
 			if err := piperGenerate(text, lang, outPath); err == nil {
 				qa.LogRecord(outPath, lang, "piper-lite", 100, attempt-1)
 				return nil
@@ -92,7 +76,6 @@ func Generate(text, lang, outPath string) error {
 			continue
 		}
 
-		// 🐱/🥇 الإنجليزية: kitten → kokoro-onnx
 		if strings.HasPrefix(lang, "en") {
 			if err := kittenTTS(text, outPath); err == nil {
 				if finalize(outPath, text, lang, "kitten", attempt) {
@@ -105,29 +88,26 @@ func Generate(text, lang, outPath string) error {
 			}
 		}
 
-		// 🔵 piper — الأساس
 		if err := piperGenerate(text, lang, outPath); err != nil {
-			fmt.Printf("   ⚠️ piper [%s]: %v → bark\n", lang, err)
+			fmt.Printf("   piper %s فشل → bark\n", lang)
 		} else if finalize(outPath, text, lang, "piper", attempt) {
 			return nil
 		}
 
-		// 🎭 bark — الذخيرة (بوابة داخل الدالة)
 		if err := barkTTS(text, lang, outPath); err == nil {
 			if finalize(outPath, text, lang, "bark", attempt) {
-				fmt.Println("   🎭 bark أنقذ الجولة!")
 				return nil
 			}
 		}
 	}
-	return fmt.Errorf("كل المحركات فشلت [%s]", lang)
+	return fmt.Errorf("كل المحركات فشلت %s", lang)
 }
 
 func finalize(outPath, text, lang, engine string, attempt int) bool {
 	if err := qa.Enhance(outPath); err != nil {
-		fmt.Printf("   ⚠️ تحسين: %v\n", err)
+		fmt.Printf("   تحسين فشل: %v\n", err)
 	} else {
-		fmt.Printf("   ✨ enhanced -16 LUFS %s\n", qa.RamStatus())
+		fmt.Printf("   enhanced | %s\n", qa.RamStatus())
 	}
 	score, _ := qa.CheckAudio(outPath, text)
 	qa.LogRecord(outPath, lang, engine, score, attempt-1)
@@ -150,19 +130,19 @@ sf.write(%q, audio, 24000)
 }
 
 func kokoroTTS(text, outPath string) error {
-	if _, err := os.Stat("models/kokoro-v1.0.onnx"); err != nil {
-		return fmt.Errorf("kokoro-onnx غير مثبت")
+	if _, err := os.Stat("models/kokoro.onnx"); err != nil {
+		return fmt.Errorf("kokoro غير مثبت")
 	}
 	py := fmt.Sprintf(`
 import warnings; warnings.filterwarnings("ignore")
 from kokoro_onnx import Kokoro
 import soundfile as sf
-k = Kokoro("models/kokoro-v1.0.onnx", "models/kokoro-v1.0-voices.bin")
+k = Kokoro("models/kokoro.onnx", "models/kokoro-voices.bin")
 audio, sr = k.create(%q, voice="af_heart", speed=1.0, lang="en-us")
 sf.write(%q, audio, sr)
 `, text, outPath)
 	if out, err := exec.Command("python3", "-c", py).CombinedOutput(); err != nil {
-		return fmt.Errorf("kokoro-onnx: %s", lastLine(string(out)))
+		return fmt.Errorf("kokoro: %s", lastLine(string(out)))
 	}
 	return fileOK(outPath)
 }
@@ -195,7 +175,7 @@ func piperGenerate(text, lang, outPath string) error {
 
 func barkTTS(text, lang, outPath string) error {
 	if qa.RamFreeMB() < 3000 {
-		return fmt.Errorf("RAM غير كافية لـ bark (%dMB)", qa.RamFreeMB())
+		return fmt.Errorf("RAM غير كافية لـ bark")
 	}
 	voice, ok := barkVoices[lang]
 	if !ok {
@@ -224,7 +204,7 @@ func fileOK(p string) error {
 		return err
 	}
 	if st.Size() < 10000 {
-		return fmt.Errorf("ملف صغير (%d bytes)", st.Size())
+		return fmt.Errorf("ملف صغير")
 	}
 	return nil
 }
