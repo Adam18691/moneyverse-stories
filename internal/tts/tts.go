@@ -6,11 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"tayyibat-money/internal/qa"
 )
 
 // ══════════════════════════════════════════════════════
-// 🎙️ محرك piper الموحد — المحرك الوحيد لكل اللغات
-//    (edge-tts محظور على GitHub runners — أُخرج نهائياً)
+// 🎙️ محرك piper الموحد + طبقة الذكاء:
+//    توليد → تحسين loudnorm → فحص whisper → إعادة تلقائية
+//    العتبة ديناميكية — SelfTune يضبطها تلقائياً مع الوقت
 // ══════════════════════════════════════════════════════
 
 // ─── 🔌 الدوال التي يستدعيها main.go ───
@@ -34,10 +37,7 @@ func DubAllLanguages(langs map[string]string, id int) map[string]string {
 	return dubs
 }
 
-// ══════════════════════════════════════════════════════
-// 🎛️ Generate — piper فقط، مع موديل إنجليزي مضاف
-// ══════════════════════════════════════════════════════
-
+// ─── الموديلات المحلية ───
 var piperModels = map[string]string{
 	"ar": "models/ar_JO-kareem-medium",
 	"en": "models/en_US-ryan-high",
@@ -47,9 +47,43 @@ var piperModels = map[string]string{
 	"de": "models/de_DE-eva_k-x-low",
 }
 
+// ══════════════════════════════════════════════════════
+// 🎛️ Generate — توليد + تحسين + فحص AI + إعادة تلقائية
+// ══════════════════════════════════════════════════════
 func Generate(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
 
+	threshold := qa.Threshold() // عتبة ديناميكية من ذاكرة التعلم
+	const maxRetries = 2
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := piperGenerate(text, lang, outPath); err != nil {
+			fmt.Printf("   ⚠️ piper [%s] فشل: %v\n", lang, err)
+			continue
+		}
+
+		// ✨ التحسين الصوتي — مستوى يوتيوب الاحترافي
+		if err := qa.Enhance(outPath); err != nil {
+			fmt.Printf("   ⚠️ تحسين صوتي فشل: %v — الأصل كافٍ\n", err)
+		} else {
+			fmt.Printf("   ✨ enhanced -16 LUFS\n")
+		}
+
+		// 🧠 فحص AI — هل الصوت فعلاً يقول النص؟
+		score, _ := qa.CheckAudio(outPath, text)
+		qa.LogRecord(outPath, lang, score, attempt-1)
+
+		if score >= threshold {
+			return nil // ✅ صوت سليم ومحسّن ومعتمد
+		}
+		fmt.Printf("   🔄 جودة منخفضة (%d%% < %d%%) — إعادة توليد %d/%d\n",
+			score, threshold, attempt, maxRetries)
+	}
+	return fmt.Errorf("piper [%s]: فشل فحص AI بعد %d محاولات", lang, maxRetries)
+}
+
+// piperGenerate: توليد piper الخام
+func piperGenerate(text, lang, outPath string) error {
 	model, ok := piperModels[lang]
 	if !ok {
 		return fmt.Errorf("لا موديل piper للغة %s", lang)
@@ -57,7 +91,6 @@ func Generate(text, lang, outPath string) error {
 	if _, err := os.Stat(model + ".onnx"); err != nil {
 		return fmt.Errorf("موديل غير موجود: %s", model)
 	}
-
 	in, _ := os.CreateTemp("", "*.txt")
 	in.WriteString(text)
 	in.Close()
@@ -73,7 +106,7 @@ func Generate(text, lang, outPath string) error {
 	cmd.Stdin, _ = os.Open(in.Name())
 	cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH=/opt/piper")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("piper [%s]: %v — %s", lang, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%v — %s", err, strings.TrimSpace(string(out)))
 	}
 	return fileOK(outPath)
 }
