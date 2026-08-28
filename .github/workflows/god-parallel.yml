@@ -97,6 +97,12 @@ jobs:
           curl -4 -sL "$B/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json" -o models/it.onnx.json
           ls -la models/
 
+      - name: Test Piper Directly
+        run: |
+          echo "مرحبا هذا اختبار" | /opt/piper/piper --model models/ar.onnx --output_file test.wav || echo "PIPER TEST FAILED"
+          ls -la test.wav || true
+          ffprobe -v error test.wav && echo "PIPER WAV VALID ✅" || echo "PIPER WAV INVALID ❌"
+
       - name: Build Engine
         run: |
           go mod tidy
@@ -142,5 +148,5 @@ jobs:
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "god-engine v2.1 [skip ci]"
-          file_pattern: "schedule/*.json data/*.json"
+          commit_message: "god-engine v2.2 [skip ci]"
+          file_pattern: "data/*.json go.mod go.sum"
