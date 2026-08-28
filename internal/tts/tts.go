@@ -9,22 +9,20 @@ import (
 )
 
 // ══════════════════════════════════════════════════════
-// 🎙️ نظام الصوت الثلاثي — السقوط الآمن:
+// 🎙️ نظام الصوت الثلاثي — الأولوية الجديدة:
 //    1️⃣ kokoro-82M (إنجليزي — بصوت af_heart)
-//    2️⃣ piper (عربي + لغات الأوروبا)
-//    3️⃣ edge-tts 6.1.19 (شبكة الأمان الأخيرة)
+//    2️⃣ piper أول أولاً لكل اللغات (محلي — لا إنترنت — لا 403!)
+//    3️⃣ edge-tts أحدث نسخة — احتياط أخير فقط
 // ══════════════════════════════════════════════════════
 
 // ─── 🔌 الدوال التي يستدعيها main.go — توقيعات مطابقة 100% ───
 
 // Narrate: يولّد الصوت الرئيسي للقصة — (النص، اللغة، مسار الإخراج)
-// الاستدعاء في main.go سطر 87: tts.Narrate(h.VoiceLine+"\n"+story, "ar", vo)
 func Narrate(text, lang, outPath string) error {
 	return Generate(text, lang, outPath)
 }
 
 // DubAllLanguages: يولّد دبلجة القصة لكل اللغات —
-// الاستدعاء في main.go سطر 91: dubs := tts.DubAllLanguages(scriptsLangs, id)
 func DubAllLanguages(langs map[string]string, id int) map[string]string {
 	dubs := make(map[string]string)
 	for lang, script := range langs {
@@ -39,14 +37,14 @@ func DubAllLanguages(langs map[string]string, id int) map[string]string {
 }
 
 // ══════════════════════════════════════════════════════
-// 🎛️ المحرك الرئيسي — Generate: نقطة الدخول الموحدة
+// 🎛️ المحرك الرئيسي — Generate
 // ══════════════════════════════════════════════════════
 
-// Generate: يولد ملف صوتي للنص حسب اللغة — يرجع مسار الملف
+// Generate: piper أولاً لكل اللغات (محلي لا 403) — ثم edge-tts احتياطاً
 func Generate(text, lang, outPath string) error {
 	os.MkdirAll(filepath.Dir(outPath), 0755)
 
-	// 1️⃣ kokoro — للإنجليزية فقط (الصوت المميز af_heart)
+	// 1️⃣ kokoro — للإنجليزية فقط (الصوت المميز)
 	if strings.HasPrefix(lang, "en") {
 		if err := kokoroTTS(text, outPath); err == nil {
 			fmt.Printf("   🥇 kokoro-82M [en] ⭐ voice=af_heart\n")
@@ -55,14 +53,14 @@ func Generate(text, lang, outPath string) error {
 		fmt.Println("   ⚠️ kokoro فشل → piper")
 	}
 
-	// 2️⃣ piper — عربي + لغات الموديلات المحملة
+	// 2️⃣ piper — الأولوية الأولى لكل اللغات (محلي، لا إنترنت، لا 403!)
 	if err := piperTTS(text, lang, outPath); err == nil {
-		fmt.Printf("   🗣️ piper [%s] 🔵\n", lang)
+		fmt.Printf("   🔵 piper [%s] ⭐\n", lang)
 		return nil
 	}
 	fmt.Printf("   ⚠️ piper [%s] فشل → edge-tts\n", lang)
 
-	// 3️⃣ edge-tts — شبكة الأمان (نسخة 6.1.19 المثبتة)
+	// 3️⃣ edge-tts أحدث نسخة — شبكة الأمان الأخيرة فقط
 	if err := edgeTTS(text, lang, outPath); err != nil {
 		return fmt.Errorf("❌ كل أنظمة الصوت فشلت [%s]: %v", lang, err)
 	}
@@ -70,7 +68,7 @@ func Generate(text, lang, outPath string) error {
 	return nil
 }
 
-// ─── 1️⃣ kokoro بصوت محدد (إصلاح ValueError: Specify a voice) ───
+// ─── 1️⃣ kokoro بصوت محدد ───
 func kokoroTTS(text, outPath string) error {
 	py := fmt.Sprintf(`
 from kokoro import KPipeline
@@ -127,7 +125,7 @@ func piperTTS(text, lang, outPath string) error {
 	return fileOK(outPath)
 }
 
-// ─── 3️⃣ edge-tts 6.1.19 — شبكة الأمان ───
+// ─── 3️⃣ edge-tts — شبكة الأمان الأخيرة ───
 var edgeVoices = map[string]string{
 	"ar": "ar-SA-HamedNeural",
 	"en": "en-US-GuyNeural",
