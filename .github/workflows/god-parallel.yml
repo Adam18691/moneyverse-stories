@@ -25,13 +25,14 @@ jobs:
           go-version: '1.22'
 
       # ============================================================
-      # 🧰 أدوات أساسية — ffmpeg + edge-tts (نسخة مثبتة 6.1.19)
+      # 🧰 أدوات أساسية — ffmpeg + edge-tts أحدث نسخة (حل الـ 403)
       # ============================================================
       - name: 🧰 Install Tools (ffmpeg + edge-tts)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
-          pip install edge-tts==6.1.19 --quiet
+          pip install --upgrade edge-tts --quiet
+          edge-tts --list-voices > /dev/null 2>&1 && echo "✅ edge-tts يعمل" || echo "⚠️ edge-tts معطل — piper سيغطي"
           which ffmpeg
           which edge-tts
 
@@ -60,7 +61,7 @@ jobs:
           " || echo "⚠️ kokoro فشل — سيُستخدم piper/edge-tts تلقائياً"
 
       # ============================================================
-      # 🗣️ Piper TTS — الحزمة الكاملة (المستوى الثاني)
+      # 🗣️ Piper TTS — الحزمة الكاملة (المستوى الأول لكل اللغات)
       # ============================================================
       - name: 🎙️ Install Piper TTS (full bundle)
         run: |
@@ -91,7 +92,8 @@ jobs:
           curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx.json" -o models/fr_FR-siwis-low.onnx.json
           curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx" -o models/de_DE-eva_k-x-low.onnx
           curl -4 -sL --retry 5 --connect-timeout 20 "$BASE/de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx.json" -o models/de_DE-eva_k-x-low.onnx.json
-          ls -la models/
+          echo "═══ فحص أحجام الموديلات ═══"
+          for f in models/*.onnx; do echo "f:f :f:(stat -c%s "$f") bytes"; done
 
       # ============================================================
       # 🔨 البناء
@@ -121,7 +123,7 @@ jobs:
       - name: 🔍 Locate Output Files
         if: always()
         run: |
-          echo "═══ كل ملفات mp4 في المستودع ═══"
+          echo "═══ كل ملفات mp4 ═══"
           find . -name "*.mp4" -not -path "./models/*" -not -path "./.git/*" || true
           echo "═══ كل ملفات wav ═══"
           find . -name "*.wav" -not -path "./models/*" -not -path "./.git/*" || true
@@ -129,7 +131,7 @@ jobs:
           ls -la
 
       # ============================================================
-      # 📦 أرشفة النتائج — تلتقط الفيديوهات أينما كانت!
+      # 📦 أرشفة النتائج — تلتقط الفيديوهات أينما كانت
       # ============================================================
       - name: 📦 Archive Videos
         if: always()
