@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       videos:
-        description: 'عدد الفيديوهات (0 = تلقائي حسب الحصة)'
+        description: 'عدد الفيديوهات (0 = تلقائي)'
         required: false
         default: '0'
   schedule:
@@ -27,88 +27,57 @@ jobs:
         with:
           go-version: '1.22'
 
-      # ============================================================
-      # 🧰 أدوات أساسية + faster-whisper int8 (بدل whisper الثقيل)
-      # ============================================================
-      - name: 🧰 Install Tools (ffmpeg + edge-tts + faster-whisper)
+      - name: 🧰 Install Tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           pip install --upgrade edge-tts --quiet
           pip install faster-whisper --quiet
-          which ffmpeg
-          which edge-tts
 
-      # ============================================================
-      # 🔑 بيانات الاعتماد + المجلدات
-      # ============================================================
       - name: 🔑 Write Credentials
         run: |
           mkdir -p credentials secrets models data output thumbnails subtitles audio
           echo "PEXELS_API_KEY=$PEXELS_API_KEY" >> credentials/env
-          echo "✅ Credentials + folders ready"
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
-      # ============================================================
-      # 🔊 RNNoise — إزالة ضوضاء عصبية بحجم 2MB فقط
-      # ============================================================
-      - name: 🔊 Install RNNoise (2MB magic)
+      - name: 🔊 Install RNNoise
         run: |
           mkdir -p models
-          curl -4 -sL --retry 3 --connect-timeout 20 \
-            "https://raw.githubusercontent.com/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/shr.wavenet_.rnnn" \
-            -o models/std.rnnn
+          curl -4 -sL --retry 3 "https://media.githubusercontent.com/media/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/shr.wavenet.rnnn" -o models/std.rnnn || true
           SIZE=$(stat -c%s models/std.rnnn 2>/dev/null || echo 0)
-          if [ "$SIZE" -gt 100000 ]; then
-            echo "OK models/std.rnnn $SIZE bytes — RNNoise مفعّل"
-          else
+          echo "rnnoise size: $SIZE"
+          if [ "$SIZE" -lt 100000 ]; then
             rm -f models/std.rnnn
-            echo "WARN rnnoise فشل — التحسين سيعمل بدون إزالة ضوضاء"
+            echo "rnnoise skipped - enhance works without it"
           fi
 
-      # ============================================================
-      # 🥇 Kokoro ONNX — استوديو بـ 88MB بدل 300MB
-      # ============================================================
-      - name: 🥇 Install Kokoro-ONNX (88MB studio)
+      - name: 🥇 Install Kokoro-ONNX
         run: |
           pip install kokoro-onnx soundfile --quiet
-          curl -4 -sL --retry 3 --connect-timeout 30 \
-            "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/kokoro-v1.0.onnx" \
-            -o models/kokoro-v1.0.onnx
-          curl -4 -sL --retry 3 --connect-timeout 30 \
-            "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/voices-v1.0.bin" \
-            -o models/kokoro-v1.0-voices.bin
+          curl -4 -sL --retry 3 "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/kokoro-v1.0.onnx" -o models/kokoro-v1.0.onnx || true
+          curl -4 -sL --retry 3 "https://huggingface.co/thewh1teagle/kokoro-onnx/resolve/main/voices-v1.0.bin" -o models/kokoro-v1.0-voices.bin || true
           S1=$(stat -c%s models/kokoro-v1.0.onnx 2>/dev/null || echo 0)
           S2=$(stat -c%s models/kokoro-v1.0-voices.bin 2>/dev/null || echo 0)
-          if [ "S1" -gt 50000000 ] && [ "S2" -gt 1000000 ]; then
-            echo "OK kokoro-onnx (S1+S1 +S1+S2 bytes) — استوديو 88MB"
-          else
-            echo "WARN kokoro-onnx ناقص — piper يغطي الإنجليزية"
+          echo "kokoro sizes: S1+S1 +S1+S2"
+          if [ "S1"−lt50000000]∣∣["S1" -lt 50000000 ] || [ "S1"−lt50000000]∣∣["S2" -lt 1000000 ]; then
+            rm -f models/kokoro-v1.0.onnx models/kokoro-v1.0-voices.bin
+            echo "kokoro-onnx incomplete - piper covers english"
           fi
 
-      # ============================================================
-      # 🐱 KittenTTS — 25MB أسرع محرك TTS على CPU
-      # ============================================================
-      - name: 🐱 Install KittenTTS (25MB rocket)
+      - name: 🐱 Install KittenTTS
         run: |
           pip install kittentts soundfile --quiet || echo "kitten skipped"
-          python3 -c "from kittentts import KittenTTS; print('kitten-25MB ready')" || echo "kitten failed - kokoro covers"
+          python3 -c "from kittentts import KittenTTS; print('kitten ready')" || echo "kitten failed - kokoro covers"
 
-      # ============================================================
-      # 🎭 Bark — الذخيرة الإخراجية (موديلات صغيرة + offload)
-      # ============================================================
-      - name: 🎭 Install Bark (dramatic voice reserve)
+      - name: 🎭 Install Bark
         run: |
           pip install suno-bark scipy --quiet
           python3 -c "import bark; print('bark ready')" || echo "bark failed - piper covers"
         env:
           SUNO_USE_SMALL_MODELS: '1'
 
-      # ============================================================
-      # 🗣️ Piper TTS — المحرك الموحد
-      # ============================================================
-      - name: 🎙️ Install Piper TTS (full bundle)
+      - name: 🎙️ Install Piper TTS
         run: |
           cd $HOME
           curl -sL "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" -o piper.tar.gz
@@ -116,75 +85,52 @@ jobs:
           sudo rm -rf /opt/piper
           sudo mv piper /opt/piper
           sudo ln -sf /opt/piper/piper /usr/local/bin/piper
-          echo "✅ piper bundle installed"
+          echo "piper bundle installed"
 
-      # ============================================================
-      # 🌍 موديلات Piper — 12 لغة كاملة (6 أساسية + 6 جديدة)
-      # ============================================================
       - name: 🌍 Download Piper Models (12 languages)
         run: |
           mkdir -p models
-          BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main"
-          LIST="
-          ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx 50000000
-          ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx.json 2000
-          en/en_US/ryan/high/en_US-ryan-high.onnx 50000000
-          en/en_US/ryan/high/en_US-ryan-high.onnx.json 2000
-          es/es_ES/carlfm/x_low/es_ES-carlfm-x-low.onnx 20000000
-          es/es_ES/carlfm/x_low/es_ES-carlfm-x-low.onnx.json 2000
-          tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx 20000000
-          tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx.json 2000
-          fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx 20000000
-          fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx.json 2000
-          de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx 20000000
-          de/de_DE/eva_k/x_low/de_DE-eva_k-x-low.onnx.json 2000
-          ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx 50000000
-          ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx.json 2000
-          ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx 50000000
-          ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json 2000
-          id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx 50000000
-          id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx.json 2000
-          hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx 50000000
-          hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json 2000
-          pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx 50000000
-          pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json 2000
-          it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx 20000000
-          it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json 2000
-          "
-          echo "$LIST" | while read REL MIN; do
-            [ -z "$REL" ] && continue
-            OUT="models/(basename(basename(basenameREL)"
-            OK=0
-            for i in 1 2 3; do
-              curl -4 -sL --retry 3 --connect-timeout 20 "BASE/BASE/BASE/REL" -o "$OUT"
-              SIZE=(stat−c(stat -c%s "(stat−cOUT" 2>/dev/null || echo 0)
-              if [ "SIZE"−gt"SIZE" -gt "SIZE"−gt"MIN" ]; then
-                echo "OK OUTOUTOUTSIZE bytes"
-                OK=1
-                break
-              fi
-              echo "RETRY OUTtry=OUT try=OUTtry=i"
-              sleep 5
-            done
-            if [ "$OK" = "0" ]; then
-              echo "WARN $OUT — سيُتخطى تلقائياً وقت التشغيل"
-              rm -f "$OUT"
-            fi
-          done
+          B="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+          dl() {
+            curl -4 -sL --retry 3 --connect-timeout 20 "B/B/B/1" -o "models/$2" || true
+            S=(stat−c(stat -c%s "models/(stat−c2" 2>/dev/null || echo 0)
+            echo "2=2 =2=S bytes"
+            if [ "S"−lt2000];thenrm−f"models/S" -lt 2000 ]; then rm -f "models/S"−lt2000];thenrm−f"models/2"; echo "WARN $2 skipped"; fi
+          }
+          dl "ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx" "ar_JO-kareem-medium.onnx"
+          dl "ar/ar_JO/kareem/medium/ar_JO-kareem-medium.onnx.json" "ar_JO-kareem-medium.onnx.json"
+          dl "en/en_US/ryan/high/en_US-ryan-high.onnx" "en_US-ryan-high.onnx"
+          dl "en/en_US/ryan/high/en_US-ryan-high.onnx.json" "en_US-ryan-high.onnx.json"
+          dl "es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx" "es_ES-carlfm-x-low.onnx"
+          dl "es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json" "es_ES-carlfm-x-low.onnx.json"
+          dl "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx" "tr_TR-fahrettin-medium.onnx"
+          dl "tr/tr_TR/fahrettin/medium/tr_TR-fahrettin-medium.onnx.json" "tr_TR-fahrettin-medium.onnx.json"
+          dl "fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx" "fr_FR-siwis-low.onnx"
+          dl "fr/fr_FR/siwis/low/fr_FR-siwis-low.onnx.json" "fr_FR-siwis-low.onnx.json"
+          dl "de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx" "de_DE-eva_k-x-low.onnx"
+          dl "de/de_DE/eva_k/x_low/de_DE-eva_k-x_low.onnx.json" "de_DE-eva_k-x-low.onnx.json"
+          dl "ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx" "ja_JP-thorsten-high.onnx"
+          dl "ja/ja_JP/thorsten/high/ja_JP-thorsten-high.onnx.json" "ja_JP-thorsten-high.onnx.json"
+          dl "ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx" "ru_RU-irina-medium.onnx"
+          dl "ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json" "ru_RU-irina-medium.onnx.json"
+          dl "id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx" "id_ID-ardhi-medium.onnx"
+          dl "id/id_ID/ardhi/medium/id_ID-ardhi-medium.onnx.json" "id_ID-ardhi-medium.onnx.json"
+          dl "hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx" "hi_IN-pratham-medium.onnx"
+          dl "hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json" "hi_IN-pratham-medium.onnx.json"
+          dl "pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx" "pt_BR-faber-medium.onnx"
+          dl "pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json" "pt_BR-faber-medium.onnx.json"
+          dl "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx" "it_IT-riccardo-x_low.onnx"
+          dl "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json" "it_IT-riccardo-x_low.onnx.json"
+          echo "=== models total ==="
+          du -sh models
 
-      # ============================================================
-      # 🔨 البناء
-      # ============================================================
       - name: Build Engine
         run: |
           go mod tidy
           go vet ./... || true
           go build -o god-engine .
-          echo "✅ BUILD OK"
+          echo "BUILD OK"
 
-      # ============================================================
-      # 🔥 الإنتاج الكامل — 12 لغة + كل الحزمة
-      # ============================================================
       - name: 🔥 GOD Production Run
         run: |
           ./god-engine
@@ -197,9 +143,6 @@ jobs:
           SUNO_OFFLOAD_CPU: '1'
           OMP_NUM_THREADS: '2'
 
-      # ============================================================
-      # 🔍 تشخيص + ذاكرة التعلم
-      # ============================================================
       - name: 🔍 Locate Output Files
         if: always()
         run: |
@@ -214,9 +157,6 @@ jobs:
           echo "=== disk usage ==="
           du -sh models 2>/dev/null
 
-      # ============================================================
-      # 📦 أرشفة النتائج
-      # ============================================================
       - name: 📦 Archive Videos
         if: always()
         uses: actions/upload-artifact@v4
@@ -230,12 +170,9 @@ jobs:
             !.git/**
           if-no-files-found: ignore
 
-      # ============================================================
-      # 💾 حفظ الحالة + ذاكرة التعلم
-      # ============================================================
       - name: 💾 Save State Back
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "god-engine v2.0 full-stack + 12 languages [skip ci]"
+          commit_message: "god-engine v2.0 [skip ci]"
           file_pattern: "schedule/*.json data/*.json"
