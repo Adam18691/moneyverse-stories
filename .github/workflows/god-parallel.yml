@@ -1,4 +1,5 @@
 name: GOD Parallel Engine
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +14,6 @@ permissions:
   contents: write
 
 env:
-  # من Variables
   LANGUAGES: ${{ vars.LANGUAGES }}
   VIDEO_LENGTH: ${{ vars.VIDEO_LENGTH }}
   VIDEOS_PER_DAY: ${{ vars.VIDEOS_PER_DAY }}
@@ -26,8 +26,7 @@ env:
   LOG_LEVEL: ${{ vars.LOG_LEVEL }}
   ENABLE_AUTO_PUBLISH: ${{ vars.ENABLE_AUTO_PUBLISH }}
   ENABLE_ANALYTICS: ${{ vars.ENABLE_ANALYTICS }}
-  
-  # من Secrets
+
   PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
   GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
   GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -44,11 +43,12 @@ jobs:
     defaults:
       run:
         shell: bash
+
     steps:
       - uses: actions/checkout@v4.1.7
         with:
           fetch-depth: 0
-      
+
       - uses: actions/setup-go@v5.0.0
         with:
           go-version: '1.22'
@@ -57,12 +57,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            ffmpeg \
-            imagemagick \
-            git \
-            curl \
-            ca-certificates
+          sudo apt-get install -y -qq ffmpeg imagemagick git curl ca-certificates
           echo "✅ System deps installed"
 
       - name: Install Python Tools
@@ -105,10 +100,8 @@ jobs:
         run: |
           mkdir -p models
           HUGGINGFACE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
-          
           for lang in ar en fr de es ja ko pt it tr id hi zh; do
             echo "📥 Downloading $lang model..."
-            # Download model (simplified)
             curl -4 -sL "$HUGGINGFACE_URL/..." -o models/$lang.onnx 2>/dev/null || echo "⚠️ $lang model skipped"
           done
           echo "✅ Models downloaded"
@@ -134,7 +127,6 @@ jobs:
           export SUNO_USE_SMALL_MODELS='1'
           export SUNO_OFFLOAD_CPU='1'
           export OMP_NUM_THREADS='2'
-          
           timeout 55m ./god-engine || echo "⚠️ Engine timeout or error"
         continue-on-error: true
 
