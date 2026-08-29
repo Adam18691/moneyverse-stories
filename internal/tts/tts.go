@@ -17,7 +17,8 @@ func Narrate(text, lang, outPath string) error {
 }
 
 func NarrateDramatic(text, lang, outPath string) error {
-	os.MkdirAll(filepath.Dir(outPath), 0755)
+	_ = os.MkdirAll(filepath.Dir(outPath), 0755)
+
 	if qa.RamFreeMB() >= 3000 {
 		if err := barkTTS(text, lang, outPath); err == nil {
 			if err := qa.Enhance(outPath); err == nil {
@@ -31,6 +32,8 @@ func NarrateDramatic(text, lang, outPath string) error {
 }
 
 func DubAllLanguages(langs map[string]string, id int) map[string]string {
+	_ = os.MkdirAll("audio", 0755)
+
 	dubs := make(map[string]string)
 	for lang, script := range langs {
 		path := fmt.Sprintf("audio/%d_%s.wav", id, lang)
@@ -57,16 +60,18 @@ var piperModels = map[string]string{
 }
 
 var barkVoices = map[string]string{
-	"ar": "v2/ar_speaker_4", "en": "v2/en_speaker_6",
-	"es": "v2/es_speaker_0", "tr": "v2/tr_speaker_0",
-	"fr": "v2/fr_speaker_1", "de": "v2/de_speaker_3",
+	"ar": "v2/ar_speaker_4",
+	"en": "v2/en_speaker_6",
+	"es": "v2/es_speaker_0",
+	"tr": "v2/tr_speaker_0",
+	"fr": "v2/fr_speaker_1",
+	"de": "v2/de_speaker_3",
 }
 
 func Generate(text, lang, outPath string) error {
-	os.MkdirAll(filepath.Dir(outPath), 0755)
+	_ = os.MkdirAll(filepath.Dir(outPath), 0755)
 
 	for attempt := 1; attempt <= 2; attempt++ {
-
 		if qa.RamFreeMB() < 1500 {
 			fmt.Printf("   وضع الطوارئ | %s — piper مباشر\n", qa.RamStatus())
 			if err := piperGenerate(text, lang, outPath); err == nil {
@@ -81,17 +86,20 @@ func Generate(text, lang, outPath string) error {
 				if finalize(outPath, text, lang, "kitten", attempt) {
 					return nil
 				}
-			} else if err := kokoroTTS(text, outPath); err == nil {
+			}
+			if err := kokoroTTS(text, outPath); err == nil {
 				if finalize(outPath, text, lang, "kokoro", attempt) {
 					return nil
 				}
 			}
 		}
 
-		if err := piperGenerate(text, lang, outPath); err != nil {
+		if err := piperGenerate(text, lang, outPath); err == nil {
+			if finalize(outPath, text, lang, "piper", attempt) {
+				return nil
+			}
+		} else {
 			fmt.Printf("   piper %s فشل → bark\n", lang)
-		} else if finalize(outPath, text, lang, "piper", attempt) {
-			return nil
 		}
 
 		if err := barkTTS(text, lang, outPath); err == nil {
@@ -100,6 +108,7 @@ func Generate(text, lang, outPath string) error {
 			}
 		}
 	}
+
 	return fmt.Errorf("كل المحركات فشلت %s", lang)
 }
 
@@ -108,20 +117,23 @@ func finalize(outPath, text, lang, engine string, attempt int) bool {
 	st, err := os.Stat(outPath)
 	if err != nil || st.Size() < 10000 {
 		fmt.Printf("   ملف تالف/صغير — رفض [%s]\n", lang)
-		os.Remove(outPath)
+		_ = os.Remove(outPath)
 		return false
 	}
+
 	chk, _ := exec.Command("ffprobe", "-v", "error", outPath).CombinedOutput()
 	if len(chk) > 0 {
 		fmt.Printf("   ملف غير صالح — رفض [%s]: %s\n", lang, lastLine(string(chk)))
-		os.Remove(outPath)
+		_ = os.Remove(outPath)
 		return false
 	}
+
 	if err := qa.Enhance(outPath); err != nil {
 		fmt.Printf("   تحسين فشل (الملف الأصلي محفوظ): %v\n", err)
 	} else {
 		fmt.Printf("   enhanced | %s\n", qa.RamStatus())
 	}
+
 	score, _ := qa.CheckAudio(outPath, text)
 	qa.LogRecord(outPath, lang, engine, score, attempt-1)
 	return score >= qa.Threshold()
@@ -168,18 +180,34 @@ func piperGenerate(text, lang, outPath string) error {
 	if _, err := os.Stat(model + ".onnx"); err != nil {
 		return fmt.Errorf("موديل غير موجود: %s", model)
 	}
-	in, _ := os.CreateTemp("", "*.txt")
-	in.WriteString(text)
-	in.Close()
+
+	in, err := os.CreateTemp("", "*.txt")
+	if err != nil {
+		return err
+	}
 	defer os.Remove(in.Name())
+
+	if _, err := in.WriteString(text); err != nil {
+		_ = in.Close()
+		return err
+	}
+	_ = in.Close()
 
 	piper := os.Getenv("PIPER_PATH")
 	if piper == "" {
 		piper = "piper"
 	}
+
+	f, err := os.Open(in.Name())
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
 	cmd := exec.Command(piper, "--model", model+".onnx", "--output_file", outPath)
-	cmd.Stdin, _ = os.Open(in.Name())
+	cmd.Stdin = f
 	cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH=/opt/piper")
+
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s", lastLine(string(out)))
 	}
@@ -203,8 +231,10 @@ audio = generate_audio(%q, history_prompt=%q)
 wav_write(%q, SAMPLE_RATE, audio)
 del audio; gc.collect()
 `, text, voice, outPath)
+
 	cmd := exec.Command("python3", "-c", py)
 	cmd.Env = append(os.Environ(), "SUNO_USE_SMALL_MODELS=1", "SUNO_OFFLOAD_CPU=1")
+
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("bark: %s", lastLine(string(out)))
 	}
