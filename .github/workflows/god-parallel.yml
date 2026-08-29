@@ -102,7 +102,7 @@ jobs:
           HUGGINGFACE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
           for lang in ar en fr de es ja ko pt it tr id hi zh; do
             echo "📥 Downloading $lang model..."
-            curl -4 -sL "$HUGGINGFACE_URL/..." -o models/$lang.onnx 2>/dev/null || echo "⚠️ $lang model skipped"
+            curl -4 -sL "$HUGGINGFACE_URL/$lang/$lang.onnx" -o models/$lang.onnx 2>/dev/null || echo "⚠️ $lang model skipped"
           done
           echo "✅ Models downloaded"
 
@@ -144,7 +144,7 @@ jobs:
 
       - name: Commit Changes
         if: always()
-        uses: stefanzweifel/git-auto-commit-action@v5.0.4
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "🔄 god-engine run #${{ github.run_number }} [skip ci]"
           commit_user_name: "God Engine Bot"
