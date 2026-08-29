@@ -11,13 +11,13 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/tidwall/gjson v1.17.3
 	go.uber.org/zap v1.27.0
-	google.golang.org/api v0.183.0
-	google.golang.org/oauth2 v0.20.0
+	google.golang.org/api v0.294.0
+	golang.org/x/oauth2 v0.36.0
 )
 
 require (
 	cloud.google.com/go/compute v1.25.1 // indirect
-	cloud.google.com/go/compute/metadata v1.25.1 // indirect
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
@@ -34,7 +34,7 @@ require (
 	golang.org/x/crypto v0.22.0 // indirect
 	golang.org/x/image v0.15.0 // indirect
 	golang.org/x/net v0.24.0 // indirect
-	golang.org/x/oauth2 v0.20.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
