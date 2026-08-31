@@ -1,8 +1,11 @@
+```yaml
 name: 🗓️ Scheduled Publisher
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # كل ساعتين — في بداية كل منتصف الساعة
+    # تشغيل الناشر كل ساعتين
+    - cron: "0 */2 * * *"
+
   workflow_dispatch:
 
 permissions:
@@ -11,27 +14,189 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - uses: actions/checkout@v4
+      # =========================
+      # Checkout
+      # =========================
 
-      - uses: actions/setup-go@v5
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
         with:
-          go-version: '1.22'
+          fetch-depth: 0
 
-      - run: go mod tidy
+      # =========================
+      # Go 1.24
+      # =========================
 
-      - name: 🗓️ Check & Publish Due Videos
-        run: go run ./cmd/publisher
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      # =========================
+      # Verify Environment
+      # =========================
+
+      - name: 🔎 Verify Go
+        run: |
+          set -e
+
+          echo "Go version:"
+          go version
+
+          echo "Go module:"
+          go env GOMOD
+
+      # =========================
+      # Dependencies
+      # =========================
+
+      - name: 📦 Download Go dependencies
+        run: |
+          set -e
+
+          go mod download
+          go mod verify
+
+          echo "✅ Dependencies verified"
+
+      # =========================
+      # Build Publisher
+      # =========================
+
+      - name: 🔨 Build Publisher
+        run: |
+          set -e
+
+          mkdir -p bin
+
+          CGO_ENABLED=0 go build \
+            -trimpath \
+            -o bin/publisher \
+            ./cmd/publisher
+
+          test -x bin/publisher
+
+          echo "✅ Publisher build completed"
+
+      # =========================
+      # Credentials Check
+      # =========================
+
+      - name: 🔐 Validate YouTube credentials
         env:
-          # بيانات الاعتماد — نظام 3 أسطر (بدون ملف JSON)
           YT_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          set -e
+
+          missing=0
+
+          if [ -z "$YT_CLIENT_ID" ]; then
+            echo "❌ Missing YOUTUBE_CLIENT_ID"
+            missing=1
+          fi
+
+          if [ -z "$YT_CLIENT_SECRET" ]; then
+            echo "❌ Missing YOUTUBE_CLIENT_SECRET"
+            missing=1
+          fi
+
+          if [ -z "$YT_REFRESH_TOKEN" ]; then
+            echo "❌ Missing YOUTUBE_REFRESH_TOKEN"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "❌ Required YouTube credentials are not configured."
+            exit 1
+          fi
+
+          echo "✅ YouTube credentials detected"
+
+      # =========================
+      # Schedule Directory
+      # =========================
+
+      - name: 📁 Prepare scheduler state
+        run: |
+          set -e
+
+          mkdir -p schedule
+
+          if [ ! -f schedule/pending.json ]; then
+            echo "[]" > schedule/pending.json
+            echo "ℹ️ Created empty schedule/pending.json"
+          else
+            echo "✅ Existing scheduler state found"
+          fi
+
+      # =========================
+      # Publish
+      # =========================
+
+      - name: 🗓️ Check & Publish Due Videos
+        env:
+          YT_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          set -e
+
+          echo "🗓️ Checking scheduled videos..."
+
+          ./bin/publisher
+
+          echo "✅ Publisher finished"
+
+      # =========================
+      # Validate State
+      # =========================
+
+      - name: 🔎 Validate scheduler state
+        if: always()
+        run: |
+          set -e
+
+          if [ -f schedule/pending.json ]; then
+            echo "📄 schedule/pending.json:"
+            cat schedule/pending.json
+
+            # التحقق من أن JSON صالح
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("schedule/pending.json")
+
+          with path.open("r", encoding="utf-8") as f:
+              json.load(f)
+
+          print("✅ pending.json is valid JSON")
+          PY
+          else
+            echo "⚠️ schedule/pending.json does not exist"
+          fi
+
+      # =========================
+      # Save State
+      # =========================
 
       - name: 💾 Save State Back
         if: always()
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "🗓️ publisher state update [skip ci]"
-          file_pattern: schedule/pending.json
+          commit_user_name: "Moneyverse Publisher"
+          commit_user_email: "publisher@moneyverse.bot"
+          file_pattern: "schedule/pending.json"
+          skip_dirty_check: false
+```
