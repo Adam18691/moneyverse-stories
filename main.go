@@ -1,3 +1,4 @@
+```go
 package main
 
 import (
@@ -20,7 +21,7 @@ import (
 	"github.com/Adam18691/moneyverse-stories/internal/youtube"
 )
 
-const VIDEOS_PER_DAY = 4
+const videosPerDay = 4
 
 var trendForVideo []trends.TopTrend
 var plan map[int]time.Time
@@ -32,29 +33,28 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	start := time.Now()
+
 	fmt.Printf("\n🎬 VIDEO %d START\n", id)
 
-	// لا نحسب الفيديو ضمن الكوتا إلا بعد نجاح الرفع إلى YouTube.
+	// نتحقق من الكوتا قبل بدء العمل المكلف.
 	uploadMu.Lock()
+	quotaReached := uploadCount >= videosPerDay
+	uploadMu.Unlock()
 
-	if uploadCount >= VIDEOS_PER_DAY {
-		uploadMu.Unlock()
-
+	if quotaReached {
 		fmt.Printf(
-			"🛑 VIDEO %d — كوتا اليوم (%d) اكتملت — تخطي\n",
+			"🛑 VIDEO %d — الكوتا اليومية (%d) مكتملة — تخطي\n",
 			id,
-			VIDEOS_PER_DAY,
+			videosPerDay,
 		)
-
 		return
 	}
-
-	uploadMu.Unlock()
 
 	story := ""
 	hookText := ""
 
-	if id <= len(trendForVideo) {
+	// استخدام الترند المقابل للفيديو إن وجد.
+	if id >= 1 && id <= len(trendForVideo) {
 		t := trendForVideo[id-1]
 
 		story = t.Story
@@ -74,12 +74,22 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 		)
 	}
 
+	// توليد Prompt احتياطي إذا لم توجد قصة من الترند.
 	p := prompts.Generate(id)
 
 	if story == "" {
 		story = p.Story
 	}
 
+	if story == "" {
+		fmt.Printf(
+			"   ❌ VIDEO %d — لم يتم إنشاء Story — تخطي\n",
+			id,
+		)
+		return
+	}
+
+	// إنشاء الـ Hook.
 	h := hook.Generate(id)
 
 	if hookText != "" {
@@ -95,22 +105,31 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 		len(timeline),
 	)
 
+	// =========================
 	// Arabic TTS
-	vo := fmt.Sprintf("audio/%d_ar.wav", id)
+	// =========================
+
+	vo := fmt.Sprintf(
+		"audio/%d_ar.wav",
+		id,
+	)
 
 	if err := tts.Narrate(
 		h.VoiceLine+"\n"+story,
 		"ar",
 		vo,
 	); err != nil {
-
 		fmt.Printf(
-			"   ⚠️ TTS failed: %v → silent render\n",
+			"   ❌ TTS failed: %v — تخطي الفيديو\n",
 			err,
 		)
+		return
 	}
 
-	// اللغات المدعومة حاليًا.
+	// =========================
+	// Multi-language Dubbing
+	// =========================
+
 	scriptLangs := map[string]string{
 		"en": story,
 		"es": story,
@@ -127,13 +146,19 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 		len(dubs),
 	)
 
+	// =========================
 	// Subtitles
+	// =========================
+
 	tracks := subs.GenerateSubtitles(
 		id,
 		scriptLangs,
 	)
 
+	// =========================
 	// Thumbnail
+	// =========================
+
 	thumbPath := fmt.Sprintf(
 		"thumbs/thumb_%d.jpg",
 		id,
@@ -144,16 +169,18 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 		h.ScreenText+" 💰",
 		"assets/burning_money.jpg",
 	); err != nil {
-
 		fmt.Printf(
-			"   ⚠️ thumbnail failed: %v\n",
+			"   ⚠️ Thumbnail failed: %v\n",
 			err,
 		)
 
 		thumbPath = ""
 	}
 
+	// =========================
 	// Render
+	// =========================
+
 	out := fmt.Sprintf(
 		"output/money_%d.mp4",
 		id,
@@ -164,21 +191,32 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 		vo,
 		out,
 	); err != nil {
-
 		fmt.Printf(
 			"   ❌ RENDER FAILED: %v — تخطي\n",
 			err,
 		)
-
 		return
 	}
 
+	// التأكد من أن ملف الفيديو موجود فعلاً.
+	if _, err := os.Stat(out); err != nil {
+		fmt.Printf(
+			"   ❌ OUTPUT FILE NOT FOUND: %v — تخطي\n",
+			err,
+		)
+		return
+	}
+
+	// =========================
 	// SEO Metadata
+	// =========================
+
 	seoMeta, err := seo.GenerateMetadata(story)
 
-	if err != nil ||
-		seoMeta == nil ||
-		seoMeta.Title == "" {
+	if err != nil || seoMeta == nil || seoMeta.Title == "" {
+		fmt.Printf(
+			"   ⚠️ SEO generation failed — using fallback metadata\n",
+		)
 
 		seoMeta = &seo.Metadata{
 			Title: fmt.Sprintf(
@@ -194,9 +232,7 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 
 			Tags: p.Tags,
 		}
-
 	} else {
-
 		lesson := ""
 
 		if len(p.Angles) > 6 {
@@ -209,12 +245,39 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 				Lesson: lesson,
 			},
 		)
+
+		// إذا لم تُرجع خدمة SEO Tags، استخدم Tags الخاصة بالـ Prompt.
+		if len(seoMeta.Tags) == 0 {
+			seoMeta.Tags = p.Tags
+		}
 	}
 
-	// وقت النشر
-	pubTime := plan[id]
+	// =========================
+	// Publish Schedule
+	// =========================
 
-	// رفع الفيديو
+	pubTime, hasSchedule := plan[id]
+
+	var publishAt *time.Time
+
+	if hasSchedule && !pubTime.IsZero() {
+		publishAt = &pubTime
+
+		fmt.Printf(
+			"   ⏰ PUBLISH AT: %s\n",
+			pubTime.Format(time.RFC3339),
+		)
+	} else {
+		fmt.Printf(
+			"   ⚠️ No valid publish schedule for VIDEO %d\n",
+			id,
+		)
+	}
+
+	// =========================
+	// YouTube Upload
+	// =========================
+
 	_, err = youtube.Upload(
 		out,
 		youtube.Meta{
@@ -223,28 +286,37 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 			Tags:        seoMeta.Tags,
 			LangTracks:  tracks,
 			ThumbPath:   thumbPath,
-			PublishAt:   &pubTime,
+			PublishAt:   publishAt,
 		},
 	)
 
 	if err != nil {
-
 		fmt.Printf(
 			"   ❌ UPLOAD FAILED: %v\n",
 			err,
 		)
-
 		return
 	}
 
-	// لا يتم احتساب الفيديو إلا بعد نجاح الرفع.
+	// =========================
+	// Confirm successful upload
+	// =========================
+
 	uploadMu.Lock()
 
-	if uploadCount < VIDEOS_PER_DAY {
+	if uploadCount < videosPerDay {
 		uploadCount++
 	}
 
+	currentUploads := uploadCount
+
 	uploadMu.Unlock()
+
+	fmt.Printf(
+		"   📺 UPLOAD CONFIRMED: %d/%d\n",
+		currentUploads,
+		videosPerDay,
+	)
 
 	fmt.Printf(
 		"✅ VIDEO %d DONE in %.0fs 💰🔥\n",
@@ -254,27 +326,25 @@ func buildVideo(id int, wg *sync.WaitGroup) {
 }
 
 func main() {
+	// =========================
+	// Project directories
+	// =========================
 
-	// إنشاء مجلدات المشروع.
-	for _, d := range []string{
+	directories := []string{
 		"output",
 		"audio",
 		"thumbs",
 		"subs",
 		"scenes",
-	} {
+	}
 
-		if err := os.MkdirAll(
-			d,
-			0755,
-		); err != nil {
-
+	for _, d := range directories {
+		if err := os.MkdirAll(d, 0755); err != nil {
 			fmt.Printf(
 				"❌ cannot create %s: %v\n",
 				d,
 				err,
 			)
-
 			return
 		}
 	}
@@ -289,7 +359,7 @@ func main() {
 
 	fmt.Printf(
 		"🔒 DAILY QUOTA: %d videos FIXED\n",
-		VIDEOS_PER_DAY,
+		videosPerDay,
 	)
 
 	fmt.Println(
@@ -308,7 +378,11 @@ func main() {
 		"════════════════════════════════════",
 	)
 
+	// =========================
+	// PHASE 0
 	// Worldwide Intelligence
+	// =========================
+
 	fmt.Println(
 		"\n🌍 PHASE 0: WORLDWIDE INTELLIGENCE",
 	)
@@ -323,10 +397,13 @@ func main() {
 
 	trendForVideo = topTrends
 
-	// IDs للفيديوهات اليومية.
+	// =========================
+	// Daily video IDs
+	// =========================
+
 	ids := make(
 		[]int,
-		VIDEOS_PER_DAY,
+		videosPerDay,
 	)
 
 	for i := range ids {
@@ -339,16 +416,35 @@ func main() {
 		len(topTrends),
 	)
 
-	// Smart schedule
+	// =========================
+	// Smart Schedule
+	// =========================
+
 	regions := schedule.BuildRegions()
 
-	plan = schedule.PlanDay(
-		ids,
-		time.Now().UTC(),
-		regions,
-	)
+	if len(regions) == 0 {
+		fmt.Println(
+			"⚠️ No regions returned by scheduler — continuing without smart regional scheduling",
+		)
 
-	// Parallel production
+		plan = make(map[int]time.Time)
+
+		for _, id := range ids {
+			plan[id] = time.Now().UTC()
+		}
+	} else {
+		plan = schedule.PlanDay(
+			ids,
+			time.Now().UTC(),
+			regions,
+		)
+	}
+
+	// =========================
+	// PHASE 1
+	// Parallel Production
+	// =========================
+
 	fmt.Println(
 		"\n⚡ PHASE 1: PARALLEL PRODUCTION",
 	)
@@ -356,7 +452,6 @@ func main() {
 	var wg sync.WaitGroup
 
 	for _, id := range ids {
-
 		wg.Add(1)
 
 		go buildVideo(
@@ -367,9 +462,18 @@ func main() {
 
 	wg.Wait()
 
+	// =========================
+	// Final Report
+	// =========================
+
+	uploadMu.Lock()
+	finalUploadCount := uploadCount
+	uploadMu.Unlock()
+
 	fmt.Printf(
 		"\n🏁 UPLOADS CONFIRMED: %d/%d — AUTO-PUBLISH AT PEAK HOURS ⏰🌍💰\n",
-		uploadCount,
-		VIDEOS_PER_DAY,
+		finalUploadCount,
+		videosPerDay,
 	)
 }
+```
