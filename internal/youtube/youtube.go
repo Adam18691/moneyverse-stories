@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +23,6 @@ import (
 // ============================================================
 
 const (
-	credentialsDir = "credentials"
-
 	clientIDFile     = "credentials/client_id.txt"
 	clientSecretFile = "credentials/client_secret.txt"
 	refreshTokenFile = "credentials/refresh_token.txt"
@@ -33,16 +30,11 @@ const (
 
 	pendingFile = "schedule/pending.json"
 
-	youtubeUploadScope =
-		"https://www.googleapis.com/auth/youtube.upload"
-
-	youtubeForceSSL =
-		"https://www.googleapis.com/auth/youtube.force-ssl"
+	youtubeUploadScope = "https://www.googleapis.com/auth/youtube.upload"
+	youtubeForceScope  = "https://www.googleapis.com/auth/youtube.force-ssl"
 )
 
-var (
-	serviceMu sync.Mutex
-)
+var serviceMu sync.Mutex
 
 // ============================================================
 // Meta
@@ -74,31 +66,26 @@ type pendingState struct {
 }
 
 // ============================================================
-// File Helpers
+// Credentials
 // ============================================================
 
 func readCredential(path string) (string, error) {
 	data, err := os.ReadFile(path)
-
 	if err != nil {
-		return "",
-			fmt.Errorf(
-				"read credential %s: %w",
-				path,
-				err,
-			)
+		return "", fmt.Errorf(
+			"read credential %s: %w",
+			path,
+			err,
+		)
 	}
 
-	value := strings.TrimSpace(
-		string(data),
-	)
+	value := strings.TrimSpace(string(data))
 
 	if value == "" {
-		return "",
-			fmt.Errorf(
-				"credential file is empty: %s",
-				path,
-			)
+		return "", fmt.Errorf(
+			"credential file is empty: %s",
+			path,
+		)
 	}
 
 	return value, nil
@@ -109,26 +96,17 @@ func readCredential(path string) (string, error) {
 // ============================================================
 
 func getOAuthConfig() (*oauth2.Config, string, error) {
-	clientID, err := readCredential(
-		clientIDFile,
-	)
-
+	clientID, err := readCredential(clientIDFile)
 	if err != nil {
 		return nil, "", err
 	}
 
-	clientSecret, err := readCredential(
-		clientSecretFile,
-	)
-
+	clientSecret, err := readCredential(clientSecretFile)
 	if err != nil {
 		return nil, "", err
 	}
 
-	refreshToken, err := readCredential(
-		refreshTokenFile,
-	)
-
+	refreshToken, err := readCredential(refreshTokenFile)
 	if err != nil {
 		return nil, "", err
 	}
@@ -136,79 +114,14 @@ func getOAuthConfig() (*oauth2.Config, string, error) {
 	cfg := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-
-		Endpoint: google.Endpoint,
-
+		Endpoint:     google.Endpoint,
 		Scopes: []string{
 			youtubeUploadScope,
-			youtubeForceSSL,
+			youtubeForceScope,
 		},
 	}
 
 	return cfg, refreshToken, nil
-}
-
-// ============================================================
-// OAuth Client
-// ============================================================
-
-func getClient() (*httpClientWrapper, error) {
-	cfg, refreshToken, err :=
-		getOAuthConfig()
-
-	if err != nil {
-		return nil, err
-	}
-
-	token := &oauth2.Token{
-		RefreshToken: refreshToken,
-	}
-
-	ctx := context.Background()
-
-	tokenSource := cfg.TokenSource(
-		ctx,
-		token,
-	)
-
-	accessToken, err :=
-		tokenSource.Token()
-
-	if err != nil {
-		return nil,
-			fmt.Errorf(
-				"refresh YouTube OAuth token: %w",
-				err,
-			)
-	}
-
-	// حفظ آخر Access Token للاستخدام التشخيصي.
-	if err := saveToken(
-		tokenFile,
-		accessToken,
-	); err != nil {
-		fmt.Printf(
-			"⚠️ token cache warning: %v\n",
-			err,
-		)
-	}
-
-	return &httpClientWrapper{
-		Client: cfg.Client(
-			ctx,
-			accessToken,
-		),
-	}, nil
-}
-
-// ============================================================
-// HTTP Wrapper
-// ============================================================
-
-type httpClientWrapper struct {
-	Client interface {
-		Do(*http.Request) (*http.Response, error)
-	}
 }
 
 // ============================================================
@@ -219,45 +132,51 @@ func newService() (*youtube.Service, error) {
 	serviceMu.Lock()
 	defer serviceMu.Unlock()
 
-	cfg, refreshToken, err :=
-		getOAuthConfig()
-
+	cfg, refreshToken, err := getOAuthConfig()
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := context.Background()
 
-	token := &oauth2.Token{
+	refreshTokenObj := &oauth2.Token{
 		RefreshToken: refreshToken,
 	}
 
 	tokenSource := cfg.TokenSource(
 		ctx,
-		token,
+		refreshTokenObj,
 	)
 
-	client := cfg.Client(
-		ctx,
-		&oauth2.Token{
-			RefreshToken: refreshToken,
-		},
-	)
-
-	// إجبار OAuth على تحديث Access Token
-	// إذا كان ذلك مطلوبًا.
-	if _, err := tokenSource.Token(); err != nil {
-		return nil,
-			fmt.Errorf(
-				"obtain YouTube access token: %w",
-				err,
-			)
+	token, err := tokenSource.Token()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"obtain YouTube access token: %w",
+			err,
+		)
 	}
 
-	return youtube.NewService(
+	if err := saveToken(tokenFile, token); err != nil {
+		fmt.Printf(
+			"⚠️ token cache warning: %v\n",
+			err,
+		)
+	}
+
+	client := cfg.Client(ctx, token)
+
+	service, err := youtube.NewService(
 		ctx,
 		option.WithHTTPClient(client),
 	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"create YouTube service: %w",
+			err,
+		)
+	}
+
+	return service, nil
 }
 
 // ============================================================
@@ -269,20 +188,15 @@ func Upload(
 	m Meta,
 ) (string, error) {
 
-	videoPath = strings.TrimSpace(
-		videoPath,
-	)
+	videoPath = strings.TrimSpace(videoPath)
 
 	if videoPath == "" {
 		return "",
-			errors.New(
-				"video path is empty",
-			)
+			errors.New("video path is empty")
 	}
 
-	if _, err := os.Stat(
-		videoPath,
-	); err != nil {
+	info, err := os.Stat(videoPath)
+	if err != nil {
 		return "",
 			fmt.Errorf(
 				"video file unavailable: %w",
@@ -290,23 +204,28 @@ func Upload(
 			)
 	}
 
-	if strings.TrimSpace(
-		m.Title,
-	) == "" {
+	if info.IsDir() {
 		return "",
-			errors.New(
-				"YouTube title is empty",
+			fmt.Errorf(
+				"video path is a directory: %s",
+				videoPath,
 			)
 	}
 
-	srv, err := newService()
+	m.Title = strings.TrimSpace(m.Title)
 
+	if m.Title == "" {
+		return "",
+			errors.New("YouTube title is empty")
+	}
+
+	srv, err := newService()
 	if err != nil {
 		return "", err
 	}
 
 	// ========================================================
-	// Upload object
+	// Privacy
 	// ========================================================
 
 	privacy := "public"
@@ -314,18 +233,23 @@ func Upload(
 	if m.PublishAt != nil &&
 		!m.PublishAt.IsZero() {
 
-		privacy = "private"
+		if m.PublishAt.UTC().After(
+			time.Now().UTC(),
+		) {
+			privacy = "private"
+		}
 	}
 
-	upload := &youtube.Video{
+	// ========================================================
+	// Video Metadata
+	// ========================================================
+
+	video := &youtube.Video{
 		Snippet: &youtube.VideoSnippet{
-			Title: m.Title,
-
+			Title:       m.Title,
 			Description: m.Description,
-
-			Tags: m.Tags,
-
-			CategoryId: "27",
+			Tags:        cleanTags(m.Tags),
+			CategoryId:  "27",
 		},
 
 		Status: &youtube.VideoStatus{
@@ -336,13 +260,10 @@ func Upload(
 	}
 
 	// ========================================================
-	// Open video
+	// Open Video
 	// ========================================================
 
-	file, err := os.Open(
-		videoPath,
-	)
-
+	file, err := os.Open(videoPath)
 	if err != nil {
 		return "",
 			fmt.Errorf(
@@ -353,14 +274,14 @@ func Upload(
 
 	defer file.Close()
 
-	// ========================================================
-	// Upload
-	// ========================================================
-
 	fmt.Printf(
 		"📤 Uploading: %s\n",
 		videoPath,
 	)
+
+	// ========================================================
+	// Upload
+	// ========================================================
 
 	resp, err := srv.
 		Videos.
@@ -369,7 +290,7 @@ func Upload(
 				"snippet",
 				"status",
 			},
-			upload,
+			video,
 		).
 		Media(file).
 		Do()
@@ -382,18 +303,21 @@ func Upload(
 			)
 	}
 
-	if resp == nil ||
-		strings.TrimSpace(
-			resp.Id,
-		) == "" {
+	if resp == nil {
+		return "",
+			errors.New(
+				"YouTube returned nil response",
+			)
+	}
 
+	videoID := strings.TrimSpace(resp.Id)
+
+	if videoID == "" {
 		return "",
 			errors.New(
 				"YouTube returned an empty video ID",
 			)
 	}
-
-	videoID := resp.Id
 
 	fmt.Printf(
 		"📺 VIDEO ID: %s\n",
@@ -422,7 +346,7 @@ func Upload(
 	}
 
 	// ========================================================
-	// Captions
+	// Captions / Language Tracks
 	// ========================================================
 
 	if len(m.LangTracks) > 0 {
@@ -441,7 +365,7 @@ func Upload(
 	}
 
 	// ========================================================
-	// Scheduled publishing
+	// Scheduled Publishing
 	// ========================================================
 
 	if m.PublishAt != nil &&
@@ -453,16 +377,17 @@ func Upload(
 			time.Now().UTC(),
 		) {
 
-			if err := recordPending(
+			err := recordPending(
 				PendingVideo{
 					YouTubeID: videoID,
-					Title: m.Title,
+					Title:     m.Title,
 					PublishAt: publishAt,
 					Published: false,
 					Attempts:  0,
 				},
-			); err != nil {
+			)
 
+			if err != nil {
 				return videoID,
 					fmt.Errorf(
 						"record schedule: %w",
@@ -474,7 +399,7 @@ func Upload(
 				"⏰ SCHEDULED: https://youtu.be/%s — PUBLIC at %s UTC\n",
 				videoID,
 				publishAt.Format(
-					"2006-01-02 15:04",
+					"2006-01-02 15:04:05",
 				),
 			)
 
@@ -508,8 +433,14 @@ func setThumbnail(
 		)
 	}
 
-	file, err := os.Open(path)
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf(
+			"thumbnail unavailable: %w",
+			err,
+		)
+	}
 
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf(
 			"open thumbnail: %w",
@@ -550,6 +481,10 @@ func uploadCaptions(
 	tracks map[string]string,
 ) error {
 
+	if len(tracks) == 0 {
+		return nil
+	}
+
 	var failed int
 
 	for lang, path := range tracks {
@@ -557,19 +492,28 @@ func uploadCaptions(
 		lang = strings.TrimSpace(lang)
 		path = strings.TrimSpace(path)
 
-		if lang == "" ||
-			path == "" {
+		if lang == "" || path == "" {
+			continue
+		}
+
+		if _, err := os.Stat(path); err != nil {
+			failed++
+
+			fmt.Printf(
+				"⚠️ Caption file missing [%s]: %v\n",
+				lang,
+				err,
+			)
 
 			continue
 		}
 
 		file, err := os.Open(path)
-
 		if err != nil {
 			failed++
 
 			fmt.Printf(
-				"⚠️ Caption %s: %v\n",
+				"⚠️ Caption open failed [%s]: %v\n",
 				lang,
 				err,
 			)
@@ -579,13 +523,10 @@ func uploadCaptions(
 
 		caption := &youtube.Caption{
 			Snippet: &youtube.CaptionSnippet{
-				VideoId: videoID,
-
+				VideoId:  videoID,
 				Language: lang,
-
-				Name: "Moneyverse Dub",
-
-				IsDraft: false,
+				Name:     "Moneyverse Dub",
+				IsDraft:  false,
 			},
 		}
 
@@ -600,7 +541,7 @@ func uploadCaptions(
 			Media(file).
 			Do()
 
-		file.Close()
+		closeErr := file.Close()
 
 		if err != nil {
 			failed++
@@ -612,6 +553,14 @@ func uploadCaptions(
 			)
 
 			continue
+		}
+
+		if closeErr != nil {
+			fmt.Printf(
+				"⚠️ Caption close warning [%s]: %v\n",
+				lang,
+				closeErr,
+			)
 		}
 
 		fmt.Printf(
@@ -638,9 +587,7 @@ func SetPublic(
 	videoID string,
 ) error {
 
-	videoID = strings.TrimSpace(
-		videoID,
-	)
+	videoID = strings.TrimSpace(videoID)
 
 	if videoID == "" {
 		return errors.New(
@@ -649,7 +596,6 @@ func SetPublic(
 	}
 
 	srv, err := newService()
-
 	if err != nil {
 		return err
 	}
@@ -679,6 +625,11 @@ func SetPublic(
 		)
 	}
 
+	fmt.Printf(
+		"✅ VIDEO PUBLIC: https://youtu.be/%s\n",
+		videoID,
+	)
+
 	return nil
 }
 
@@ -690,10 +641,20 @@ func recordPending(
 	video PendingVideo,
 ) error {
 
+	video.YouTubeID =
+		strings.TrimSpace(video.YouTubeID)
+
 	if video.YouTubeID == "" {
 		return errors.New(
 			"cannot schedule empty video ID",
 		)
+	}
+
+	video.Title =
+		strings.TrimSpace(video.Title)
+
+	if video.Title == "" {
+		video.Title = video.YouTubeID
 	}
 
 	if video.PublishAt.IsZero() {
@@ -701,6 +662,9 @@ func recordPending(
 			"cannot schedule without publish time",
 		)
 	}
+
+	video.PublishAt =
+		video.PublishAt.UTC()
 
 	if err := os.MkdirAll(
 		filepath.Dir(pendingFile),
@@ -713,70 +677,121 @@ func recordPending(
 		)
 	}
 
-	var current pendingState
+	current, err := loadPending()
+
+	if err != nil {
+		return err
+	}
+
+	// ========================================================
+	// Update Existing
+	// ========================================================
+
+	for i := range current {
+
+		if current[i].YouTubeID ==
+			video.YouTubeID {
+
+			// الاحتفاظ بعدد المحاولات الحالي
+			// إذا كان السجل موجودًا.
+			video.Attempts =
+				current[i].Attempts
+
+			video.Published =
+				current[i].Published
+
+			current[i] = video
+
+			return savePending(current)
+		}
+	}
+
+	// ========================================================
+	// Append New
+	// ========================================================
+
+	current = append(
+		current,
+		video,
+	)
+
+	return savePending(current)
+}
+
+// ============================================================
+// Load Pending
+// ============================================================
+
+func loadPending() ([]PendingVideo, error) {
 
 	data, err := os.ReadFile(
 		pendingFile,
 	)
 
-	if err == nil &&
-		len(
-			strings.TrimSpace(
-				string(data),
-			),
-		) > 0 {
+	if err != nil {
 
-		// الصيغة الجديدة.
-		if err := json.Unmarshal(
-			data,
-			&current,
-		); err != nil {
-
-			// دعم الصيغة القديمة [].
-			var legacy []PendingVideo
-
-			if legacyErr :=
-				json.Unmarshal(
-					data,
-					&legacy,
-				); legacyErr != nil {
-
-				return fmt.Errorf(
-					"decode pending state: %w",
-					err,
-				)
-			}
-
-			current.Videos = legacy
+		if os.IsNotExist(err) {
+			return []PendingVideo{}, nil
 		}
-	}
 
-	if current.Videos == nil {
-		current.Videos = []PendingVideo{}
-	}
-
-	// منع إضافة نفس الفيديو مرتين.
-	for i := range current.Videos {
-
-		if current.Videos[i].YouTubeID ==
-			video.YouTubeID {
-
-			current.Videos[i] = video
-
-			return savePending(
-				current.Videos,
+		return nil,
+			fmt.Errorf(
+				"read %s: %w",
+				pendingFile,
+				err,
 			)
-		}
 	}
 
-	current.Videos = append(
-		current.Videos,
-		video,
-	)
+	if len(
+		strings.TrimSpace(
+			string(data),
+		),
+	) == 0 {
 
-	return savePending(
-		current.Videos,
-	)
+		return []PendingVideo{}, nil
+	}
+
+	// ========================================================
+	// New Format
+	// ========================================================
+
+	var state pendingState
+
+	if err := json.Unmarshal(
+		data,
+		&state,
+	); err == nil {
+
+		if state.Videos == nil {
+			state.Videos = []PendingVideo{}
+		}
+
+		return state.Videos, nil
+	}
+
+	// ========================================================
+	// Legacy Format
+	// ========================================================
+
+	var legacy []PendingVideo
+
+	if err := json.Unmarshal(
+		data,
+		&legacy,
+	); err != nil {
+
+		return nil,
+			fmt.Errorf(
+				"invalid pending JSON: %w",
+				err,
+			)
+	}
+
+	if legacy == nil {
+		legacy = []PendingVideo{}
+	}
+
+	return legacy, nil
 }
 
 // ============================================================
@@ -818,29 +833,30 @@ func savePending(
 		'\n',
 	)
 
-	temp := pendingFile + ".tmp"
+	tempFile :=
+		pendingFile + ".tmp"
 
 	if err := os.WriteFile(
-		temp,
+		tempFile,
 		data,
 		0644,
 	); err != nil {
 
 		return fmt.Errorf(
-			"write pending temp file: %w",
+			"write temporary pending state: %w",
 			err,
 		)
 	}
 
 	if err := os.Rename(
-		temp,
+		tempFile,
 		pendingFile,
 	); err != nil {
 
-		_ = os.Remove(temp)
+		_ = os.Remove(tempFile)
 
 		return fmt.Errorf(
-			"replace pending file: %w",
+			"replace pending state: %w",
 			err,
 		)
 	}
@@ -859,7 +875,7 @@ func saveToken(
 
 	if token == nil {
 		return errors.New(
-			"token is nil",
+			"OAuth token is nil",
 		)
 	}
 
@@ -869,7 +885,7 @@ func saveToken(
 	); err != nil {
 
 		return fmt.Errorf(
-			"create credential directory: %w",
+			"create token directory: %w",
 			err,
 		)
 	}
@@ -882,33 +898,34 @@ func saveToken(
 
 	if err != nil {
 		return fmt.Errorf(
-			"encode token: %w",
+			"encode OAuth token: %w",
 			err,
 		)
 	}
 
-	temp := path + ".tmp"
+	tempFile := path + ".tmp"
 
 	if err := os.WriteFile(
-		temp,
+		tempFile,
 		data,
 		0600,
 	); err != nil {
+
 		return fmt.Errorf(
-			"write token: %w",
+			"write OAuth token: %w",
 			err,
 		)
 	}
 
 	if err := os.Rename(
-		temp,
+		tempFile,
 		path,
 	); err != nil {
 
-		_ = os.Remove(temp)
+		_ = os.Remove(tempFile)
 
 		return fmt.Errorf(
-			"replace token: %w",
+			"replace OAuth token: %w",
 			err,
 		)
 	}
@@ -917,7 +934,7 @@ func saveToken(
 }
 
 // ============================================================
-// Debug / Health Check
+// Credential Health Check
 // ============================================================
 
 func CheckCredentials() error {
@@ -931,20 +948,53 @@ func CheckCredentials() error {
 }
 
 // ============================================================
-// Utility
+// Helpers
 // ============================================================
 
-func fileExists(path string) bool {
-	if path == "" {
-		return false
+func cleanTags(
+	tags []string,
+) []string {
+
+	if len(tags) == 0 {
+		return nil
 	}
 
-	_, err := os.Stat(path)
+	result := make(
+		[]string,
+		0,
+		len(tags),
+	)
 
-	return err == nil
+	seen := make(
+		map[string]struct{},
+	)
+
+	for _, tag := range tags {
+
+		tag = strings.TrimSpace(tag)
+
+		if tag == "" {
+			continue
+		}
+
+		key := strings.ToLower(tag)
+
+		if _, exists := seen[key]; exists {
+			continue
+		}
+
+		seen[key] = struct{}{}
+
+		result = append(
+			result,
+			tag,
+		)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
 }
-
-// منع compiler من اعتبار io غير مستخدم
-// إذا تم توسيع الرفع لاحقًا لاستخدام io مباشرة.
-var _ io.Reader
 ```
