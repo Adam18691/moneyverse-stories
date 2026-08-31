@@ -1,79 +1,258 @@
+```go
 //go:build vlypse
 // +build vlypse
 
 // Vlypse IDE - One Click Boilerplate for Go
-// Project: tayyibat-mega-v14-god
-// Language: Go 1.22
+// Project: moneyverse-stories
+// Language: Go 1.24
 
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 )
 
-// Vlypse Boilerplate Config - Go Native
+const (
+	projectName = "moneyverse-stories"
+	goVersion   = "1.24"
+	moduleName  = "github.com/Adam18691/moneyverse-stories"
+)
+
+// VlypseConfig هي إعدادات مشروع Vlypse.
 type VlypseConfig struct {
+	Project   string   `json:"project"`
 	Framework string   `json:"framework"`
 	Language  string   `json:"language"`
+	GoVersion string   `json:"go_version"`
+	Module    string   `json:"module"`
+	Entry     string   `json:"entry"`
 	Plugins   []string `json:"plugins"`
 }
 
+// init يتم تشغيله فقط عند البناء باستخدام:
+// -tags vlypse
 func init() {
-	// ده اللي Vlypse IDE بيقرأه أول ما تفتح المشروع في Go
 	config := VlypseConfig{
-		Framework: "Go + FFmpeg + Melt",
-		Language:  "Go 1.22",
-		Plugins:   []string{"ffmpeg", "melt", "youtube-api", "432hz-music", "cinematic-angles"},
+		Project:   projectName,
+		Framework: "Go + FFmpeg + Melt + YouTube API",
+		Language:  "Go",
+		GoVersion: goVersion,
+		Module:    moduleName,
+		Entry:     "main.go",
+
+		Plugins: []string{
+			"ffmpeg",
+			"melt",
+			"youtube-api",
+			"analytics",
+			"432hz-music",
+			"cinematic-angles",
+		},
 	}
 
-	// لو متغير البيئة VLYPSE_MODE موجود - يعني المشروع مفتوح في Vlypse IDE
-	if os.Getenv("VLYPSE_MODE") == "generate" {
-		fmt.Println("⚡ Vlypse IDE - Generating Go boilerplate in one click...")
-		fmt.Printf("Framework: %s\n", config.Framework)
-		fmt.Printf("Language: %s\n", config.Language)
-		fmt.Printf("Plugins: %v\n", config.Plugins)
-		generateGoBoilerplate()
-		os.Exit(0)
+	if os.Getenv("VLYPSE_MODE") != "generate" {
+		return
 	}
+
+	fmt.Println(
+		"⚡ Vlypse IDE - Generating project configuration...",
+	)
+
+	fmt.Printf(
+		"Project: %s\n",
+		config.Project,
+	)
+
+	fmt.Printf(
+		"Framework: %s\n",
+		config.Framework,
+	)
+
+	fmt.Printf(
+		"Language: %s %s\n",
+		config.Language,
+		config.GoVersion,
+	)
+
+	fmt.Printf(
+		"Module: %s\n",
+		config.Module,
+	)
+
+	fmt.Printf(
+		"Plugins: %v\n",
+		config.Plugins,
+	)
+
+	if err := generateGoBoilerplate(config); err != nil {
+		fmt.Printf(
+			"❌ Vlypse generation failed: %v\n",
+			err,
+		)
+
+		os.Exit(1)
+	}
+
+	fmt.Println(
+		"✅ Vlypse project configuration generated successfully",
+	)
+
+	os.Exit(0)
 }
 
-func generateGoBoilerplate() {
-	// Vlypse هيولد دول أوتوماتيك بضغطة زر - بدل ما تكتبهم يدوي
+// generateGoBoilerplate ينشئ ملفات إعداد Vlypse
+// دون استبدال go.mod الموجود في المشروع.
+func generateGoBoilerplate(
+	config VlypseConfig,
+) error {
 
-	// 1. go.mod
-	os.WriteFile("go.mod", []byte(`module tayyibat-mega-v14-god
+	// =========================
+	// vlypse.json
+	// =========================
 
-go 1.22
+	data, err := json.MarshalIndent(
+		config,
+		"",
+		"  ",
+	)
 
-require (
-	// No external deps - 100% stdlib for music + video
-)
-`), 0644)
+	if err != nil {
+		return fmt.Errorf(
+			"encode Vlypse config: %w",
+			err,
+		)
+	}
 
-	// 2. Makefile للـ One Click Build
-	os.WriteFile("Makefile", []byte(`build:
-	go run main.go boilerplate.go
+	if err := writeFile(
+		"vlypse.json",
+		append(data, '\n'),
+	); err != nil {
+		return err
+	}
 
-upload:
-	python3 upload.py
+	// =========================
+	// Makefile
+	// =========================
 
-all: build upload
+	makefile := `# Moneyverse Stories
+# Vlypse / Go 1.24
+
+.PHONY: build test fmt vet run vlypse clean
+
+build:
+	go build -trimpath -o moneyverse-stories .
+
+run:
+	go run .
+
+test:
+	go test ./...
+
+fmt:
+	gofmt -w $$(find . -type f -name '*.go' -not -path './vendor/*')
+
+vet:
+	go vet ./...
 
 vlypse:
-	VLYPSE_MODE=generate go run boilerplate.go
-`), 0644)
+	VLYPSE_MODE=generate go run -tags vlypse boilerplate.go
 
-	// 3. vlypse.json للـ IDE
-	os.WriteFile("vlypse.json", []byte(`{
-  "project": "tayyibat-mega-v14-god",
+clean:
+	rm -f moneyverse-stories
+`
+
+	if err := writeFile(
+		"Makefile",
+		[]byte(makefile),
+	); err != nil {
+		return err
+	}
+
+	// =========================
+	// .vlypse/config.json
+	// =========================
+
+	vlypseDir := ".vlypse"
+
+	if err := os.MkdirAll(
+		vlypseDir,
+		0755,
+	); err != nil {
+		return fmt.Errorf(
+			"create .vlypse directory: %w",
+			err,
+		)
+	}
+
+	vlypseConfig := `{
+  "project": "moneyverse-stories",
   "language": "Go",
+  "go_version": "1.24",
+  "module": "github.com/Adam18691/moneyverse-stories",
   "entry": "main.go",
-  "boilerplate_cmd": "go run boilerplate.go",
-  "build_cmd": "go run main.go",
+  "build_cmd": "go build -trimpath -o moneyverse-stories .",
+  "run_cmd": "go run .",
+  "test_cmd": "go test ./...",
+  "format_cmd": "gofmt -w .",
+  "vet_cmd": "go vet ./...",
   "one_click": true
-}`), 0644)
-
-	fmt.Println("✅ Go Boilerplate generated in 9.2s - Deployed successfully")
-	fmt.Println("✅ main.go + go.mod + Makefile + vlypse.json ready")
 }
+`
+
+	if err := writeFile(
+		".vlypse/config.json",
+		[]byte(vlypseConfig),
+	); err != nil {
+		return err
+	}
+
+	// =========================
+	// Generation Summary
+	// =========================
+
+	fmt.Println(
+		"📦 Generated:",
+	)
+
+	fmt.Println(
+		"   ✅ vlypse.json",
+	)
+
+	fmt.Println(
+		"   ✅ Makefile",
+	)
+
+	fmt.Println(
+		"   ✅ .vlypse/config.json",
+	)
+
+	fmt.Println(
+		"ℹ️ Existing go.mod was preserved",
+	)
+
+	return nil
+}
+
+// writeFile يكتب الملف مع معالجة الأخطاء.
+func writeFile(
+	path string,
+	data []byte,
+) error {
+
+	if err := os.WriteFile(
+		path,
+		data,
+		0644,
+	); err != nil {
+		return fmt.Errorf(
+			"write %s: %w",
+			path,
+			err,
+		)
+	}
+
+	return nil
+}
+```
