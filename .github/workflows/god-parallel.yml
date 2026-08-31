@@ -1,14 +1,16 @@
+```yaml
 name: GOD Parallel Engine
 
 on:
   workflow_dispatch:
     inputs:
       videos:
-        description: 'عدد الفيديوهات (0 = تلقائي)'
+        description: "عدد الفيديوهات (0 = تلقائي)"
         required: false
-        default: '0'
+        default: "0"
+
   schedule:
-    - cron: '0 6,14,20 * * *'
+    - cron: "0 6,14,20 * * *"
 
 permissions:
   contents: write
@@ -40,39 +42,96 @@ jobs:
   god-run:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
     defaults:
       run:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4.1.7
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5.0.0
+      # المشروع يستخدم Go 1.24
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: "1.24"
           cache: true
+
+      - name: Verify Go
+        run: |
+          set -e
+          echo "Go version:"
+          go version
+          echo "Go environment:"
+          go env GOPATH GOMOD
 
       - name: Install System Dependencies
         run: |
+          set -e
+
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg imagemagick git curl ca-certificates
-          echo "✅ System deps installed"
+
+          sudo apt-get install -y -qq \
+            ffmpeg \
+            imagemagick \
+            git \
+            curl \
+            ca-certificates
+
+          echo "✅ System dependencies installed"
 
       - name: Install Python Tools
         run: |
+          set -e
+
           python3 -m pip install --upgrade pip --quiet
-          pip install --upgrade edge-tts faster-whisper soundfile --quiet
-          echo "✅ Python deps installed"
+
+          pip install --upgrade \
+            edge-tts \
+            faster-whisper \
+            soundfile \
+            --quiet
+
+          echo "✅ Python dependencies installed"
 
       - name: Create Directories
         run: |
-          mkdir -p credentials secrets models data output thumbnails subtitles audio
+          set -e
+
+          mkdir -p \
+            credentials \
+            secrets \
+            models \
+            data \
+            output \
+            thumbnails \
+            subtitles \
+            audio \
+            thumbs \
+            subs \
+            scenes
+
           echo "✅ Directories created"
 
       - name: Setup Google Credentials
         run: |
+          set -e
+
+          if [ -z "$GOOGLE_CLIENT_ID" ]; then
+            echo "⚠️ GOOGLE_CLIENT_ID is not configured"
+          fi
+
+          if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+            echo "⚠️ GOOGLE_CLIENT_SECRET is not configured"
+          fi
+
+          if [ -z "$YOUTUBE_CHANNEL_ID" ]; then
+            echo "⚠️ YOUTUBE_CHANNEL_ID is not configured"
+          fi
+
           cat > credentials/google-config.json <<EOF
           {
             "type": "oauth2",
@@ -81,84 +140,169 @@ jobs:
             "channel_id": "$YOUTUBE_CHANNEL_ID"
           }
           EOF
-          echo "✅ Google OAuth configured"
+
+          chmod 600 credentials/google-config.json
+
+          echo "✅ Google OAuth configuration prepared"
 
       - name: Install Piper TTS
         run: |
-          cd $HOME
-          if [ ! -d "/opt/piper" ]; then
-            echo "📥 Downloading Piper..."
-            curl -4 -sL "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" -o piper.tar.gz
-            tar xzf piper.tar.gz
-            sudo rm -rf /opt/piper
-            sudo mv piper /opt/piper
-            sudo ln -sf /opt/piper/piper /usr/local/bin/piper
+          set -e
+
+          if command -v piper >/dev/null 2>&1; then
+            echo "✅ Piper already installed"
+            piper --help >/dev/null
+            exit 0
           fi
-          piper --help >/dev/null && echo "✅ Piper ready" || echo "❌ Piper failed"
+
+          cd "$HOME"
+
+          echo "📥 Downloading Piper..."
+
+          curl -4 -fL \
+            "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz" \
+            -o piper.tar.gz
+
+          tar xzf piper.tar.gz
+
+          sudo rm -rf /opt/piper
+
+          sudo mv piper /opt/piper
+
+          sudo ln -sf \
+            /opt/piper/piper \
+            /usr/local/bin/piper
+
+          piper --help >/dev/null
+
+          echo "✅ Piper ready"
 
       - name: Download Piper Models
         run: |
+          set -e
+
           mkdir -p models
+
           HUGGINGFACE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
           for lang in ar en fr de es ja ko pt it tr id hi zh; do
-            echo "📥 Downloading $lang model..."
-            curl -4 -sL "$HUGGINGFACE_URL/$lang/$lang.onnx" -o models/$lang.onnx 2>/dev/null || echo "⚠️ $lang model skipped"
+            echo "📥 Checking $lang model..."
+
+            if curl -4 -fL \
+              "$HUGGINGFACE_URL/$lang/$lang.onnx" \
+              -o "models/$lang.onnx"; then
+
+              echo "✅ $lang model downloaded"
+
+            else
+
+              echo "⚠️ $lang model unavailable — continuing"
+
+              rm -f "models/$lang.onnx"
+
+            fi
           done
-          echo "✅ Models downloaded"
+
+          echo "📦 Available models:"
+          ls -lh models/ || true
 
       - name: Verify Go Dependencies
         run: |
+          set -e
+
           go mod download
           go mod verify
+
           echo "✅ Go dependencies verified"
+
+      - name: Format Check
+        run: |
+          set -e
+
+          files="$(find . -type f -name '*.go' \
+            -not -path './vendor/*')"
+
+          if [ -n "$files" ]; then
+            unformatted="$(gofmt -l $files || true)"
+
+            if [ -n "$unformatted" ]; then
+              echo "❌ Unformatted Go files:"
+              echo "$unformatted"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Go formatting check passed"
 
       - name: Build Engine
         run: |
-          go build -v -o god-engine .
+          set -e
+
+          export CGO_ENABLED=0
+
+          go build \
+            -trimpath \
+            -v \
+            -o god-engine \
+            .
+
+          test -f god-engine
+
           echo "✅ Build completed"
 
       - name: Run Production Engine
         if: success()
         run: |
           export VIDEOS_COUNT="${{ github.event.inputs.videos }}"
-          export CGO_ENABLED='0'
-          export LD_LIBRARY_PATH=/opt/piper
-          export PIPER_PATH=/opt/piper/piper
-          export SUNO_USE_SMALL_MODELS='1'
-          export SUNO_OFFLOAD_CPU='1'
-          export OMP_NUM_THREADS='2'
-          timeout 55m ./god-engine || echo "⚠️ Engine timeout or error"
-        continue-on-error: true
+          export CGO_ENABLED="0"
+          export LD_LIBRARY_PATH="/opt/piper"
+          export PIPER_PATH="/opt/piper/piper"
+          export SUNO_USE_SMALL_MODELS="1"
+          export SUNO_OFFLOAD_CPU="1"
+          export OMP_NUM_THREADS="2"
+
+          if [ -z "$VIDEOS_COUNT" ]; then
+            export VIDEOS_COUNT="0"
+          fi
+
+          echo "🎬 Starting Moneyverse Stories Engine"
+          echo "🎥 Requested videos: $VIDEOS_COUNT"
+
+          timeout 55m ./god-engine
 
       - name: Upload Artifacts
         if: always()
-        uses: actions/upload-artifact@v4.3.0
+        uses: actions/upload-artifact@v4
         with:
           name: god-engine-run-${{ github.run_number }}
+
           path: |
             output/**/*.mp4
             thumbnails/**/*.jpg
+            thumbs/**/*.jpg
             data/**/*.json
+
           if-no-files-found: ignore
           retention-days: 30
 
       - name: Commit Changes
-        if: always()
+        if: success()
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "🔄 god-engine run #${{ github.run_number }} [skip ci]"
           commit_user_name: "God Engine Bot"
           commit_user_email: "god-engine@moneyverse.bot"
           file_pattern: "data/**/*.json"
-          push_options: '--force-with-lease'
           skip_dirty_check: false
 
       - name: Send Discord Notification
         if: always() && vars.WEBHOOK_URL != ''
         run: |
           STATUS="${{ job.status }}"
-          curl -X POST "${{ vars.WEBHOOK_URL }}" \
+
+          curl -4 -fX POST \
+            "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d '{
-              "content": "🎬 God Engine Run #${{ github.run_number }} finished with status: '"$STATUS"'"
-            }'
+            -d "{\"content\":\"🎬 God Engine Run #${{ github.run_number }} finished with status: ${STATUS}\"}" \
+            || echo "⚠️ Discord notification failed"
+```
