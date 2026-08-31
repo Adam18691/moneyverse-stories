@@ -1,34 +1,33 @@
 ```go
-// publish.go — ينشر الفيديوهات المجدولة التي حان وقتها
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/Adam18691/moneyverse-stories/internal/youtube"
 )
 
 const (
 	pendingFile = "schedule/pending.json"
 
-	tokenURL = "https://oauth2.googleapis.com/token"
-
-	youtubeVideosURL = "https://www.googleapis.com/youtube/v3/videos?part=status"
-
 	maxAttempts = 3
 
-	httpTimeout = 30 * time.Second
+	lockFile = "schedule/publisher.lock"
 )
 
-// PendingVideo: فيديو مجدول في طابور النشر.
+var fileMu sync.Mutex
+
+// ============================================================
+// Pending Video
+// ============================================================
+
 type PendingVideo struct {
 	YouTubeID string    `json:"youtube_id"`
 	Title     string    `json:"title"`
@@ -37,482 +36,374 @@ type PendingVideo struct {
 	Attempts  int       `json:"attempts"`
 }
 
-// state: بنية ملف الطابور.
 type state struct {
 	Videos []PendingVideo `json:"videos"`
 }
 
-// HTTP client موحد بمهلة زمنية لمنع تعليق الـ publisher.
-var httpClient = &http.Client{
-	Timeout: httpTimeout,
-}
+// ============================================================
+// Main
+// ============================================================
 
 func main() {
 	fmt.Println(
-		"🗓️ PUBLISHER CHECK —",
-		time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		"🗓️ MONEYVERSE PUBLISHER",
 	)
 
-	pending, err := loadPending()
+	fmt.Println(
+		"════════════════════════════════════",
+	)
 
+	fmt.Printf(
+		"⏰ CHECK: %s\n",
+		time.Now().
+			UTC().
+			Format(time.RFC3339),
+	)
+
+	fmt.Printf(
+		"📁 STATE: %s\n",
+		pendingFile,
+	)
+
+	fmt.Printf(
+		"🔁 MAX ATTEMPTS: %d\n",
+		maxAttempts,
+	)
+
+	fmt.Println(
+		"════════════════════════════════════",
+	)
+
+	// ========================================================
+	// Prevent overlapping publisher processes
+	// ========================================================
+
+	unlock, err := acquireLock()
 	if err != nil {
 		fmt.Printf(
-			"❌ تعذر قراءة طابور النشر: %v\n",
+			"🛑 Publisher already running: %v\n",
 			err,
 		)
-		os.Exit(1)
+		return
+	}
+
+	defer unlock()
+
+	// ========================================================
+	// Load
+	// ========================================================
+
+	pending, err := loadPending()
+	if err != nil {
+		fmt.Printf(
+			"❌ LOAD FAILED: %v\n",
+			err,
+		)
+		return
 	}
 
 	if len(pending) == 0 {
-		fmt.Println("📭 لا يوجد فيديوهات مجدولة")
+		fmt.Println(
+			"📭 لا يوجد فيديوهات مجدولة",
+		)
 		return
 	}
+
+	fmt.Printf(
+		"📋 PENDING VIDEOS: %d\n",
+		len(pending),
+	)
+
+	// ========================================================
+	// Process
+	// ========================================================
 
 	now := time.Now().UTC()
 
 	changed := false
-	processed := 0
-	published := 0
-	failed := 0
-	waiting := 0
+	publishedCount := 0
+	failedCount := 0
+	waitingCount := 0
+	skippedCount := 0
 
 	for i := range pending {
 		video := &pending[i]
 
-		// =========================
-		// Already Published
-		// =========================
+		// ----------------------------------------------------
+		// Invalid entry
+		// ----------------------------------------------------
+
+		if strings.TrimSpace(
+			video.YouTubeID,
+		) == "" {
+
+			fmt.Printf(
+				"⚠️ ENTRY %d — missing YouTube ID — skip\n",
+				i+1,
+			)
+
+			skippedCount++
+			continue
+		}
+
+		// ----------------------------------------------------
+		// Already published
+		// ----------------------------------------------------
 
 		if video.Published {
-			continue
-		}
+			skippedCount++
 
-		// =========================
-		// Validate YouTube ID
-		// =========================
-
-		video.YouTubeID = strings.TrimSpace(
-			video.YouTubeID,
-		)
-
-		if video.YouTubeID == "" {
-			fmt.Println(
-				"   ⚠️ SKIP — فيديو بدون YouTube ID",
+			fmt.Printf(
+				"   ✓ %s — already published\n",
+				video.YouTubeID,
 			)
+
 			continue
 		}
 
-		// =========================
-		// Validate Publish Time
-		// =========================
+		// ----------------------------------------------------
+		// Invalid publish time
+		// ----------------------------------------------------
 
 		if video.PublishAt.IsZero() {
 			fmt.Printf(
-				"   ⚠️ SKIP %s — وقت النشر غير محدد\n",
+				"   ⚠️ %s — invalid publish time — skip\n",
 				video.YouTubeID,
 			)
+
+			skippedCount++
 			continue
 		}
 
+		// ----------------------------------------------------
+		// Normalize time to UTC
+		// ----------------------------------------------------
+
 		publishAt := video.PublishAt.UTC()
 
-		// =========================
-		// Not Due Yet
-		// =========================
+		// ----------------------------------------------------
+		// Not due yet
+		// ----------------------------------------------------
 
 		if now.Before(publishAt) {
-			waiting++
+			waitingCount++
 
 			fmt.Printf(
-				"   ⏳ WAIT %s — %s\n",
+				"   ⏳ %s — waiting until %s UTC\n",
 				video.YouTubeID,
 				publishAt.Format(
-					"2006-01-02 15:04 UTC",
+					time.RFC3339,
 				),
 			)
 
 			continue
 		}
 
-		// =========================
-		// Maximum Attempts
-		// =========================
+		// ----------------------------------------------------
+		// Attempts limit
+		// ----------------------------------------------------
 
 		if video.Attempts >= maxAttempts {
 			fmt.Printf(
-				"   🚫 BLOCKED %s — %d/%d attempts used\n",
+				"   🛑 %s — %d attempts reached — permanently skipped\n",
 				video.YouTubeID,
-				video.Attempts,
 				maxAttempts,
 			)
 
-			// لا نضع Published=true.
-			// يظل الفيديو موجودًا للمراجعة اليدوية.
+			// لا نضع Published=true هنا؛
+			// لأن الفيديو لم يُنشر بنجاح.
+			//
+			// إبقاؤه false يسمح بالتعرف عليه كفيديو
+			// فشل نهائيًا بدل اعتباره منشورًا.
+			skippedCount++
 			continue
 		}
 
-		processed++
+		// ====================================================
+		// Publish
+		// ====================================================
 
 		fmt.Printf(
-			"   🚀 PUBLISHING %s — %s\n",
+			"   🚀 PUBLISHING: %s",
 			video.YouTubeID,
-			video.Title,
 		)
 
-		// =========================
-		// Publish
-		// =========================
+		if video.Title != "" {
+			fmt.Printf(
+				" — %s",
+				video.Title,
+			)
+		}
 
-		if err := setPublic(video.YouTubeID); err != nil {
+		fmt.Println()
+
+		err := publishVideo(
+			video.YouTubeID,
+		)
+
+		if err != nil {
 			video.Attempts++
 
-			failed++
+			failedCount++
 			changed = true
 
 			fmt.Printf(
-				"   ❌ FAILED %s — attempt %d/%d — %v\n",
+				"   ❌ FAILED: %s\n",
 				video.YouTubeID,
+			)
+
+			fmt.Printf(
+				"      Attempt: %d/%d\n",
 				video.Attempts,
 				maxAttempts,
+			)
+
+			fmt.Printf(
+				"      Error: %v\n",
 				err,
 			)
 
 			continue
 		}
 
-		// =========================
-		// Confirm Published
-		// =========================
+		// ----------------------------------------------------
+		// Success
+		// ----------------------------------------------------
 
 		video.Published = true
-
-		published++
 		changed = true
+		publishedCount++
 
 		fmt.Printf(
-			"   ✅ PUBLISHED: https://youtu.be/%s — %s\n",
+			"   ✅ PUBLISHED: https://youtu.be/%s\n",
 			video.YouTubeID,
-			video.Title,
 		)
+
+		if video.Title != "" {
+			fmt.Printf(
+				"      %s\n",
+				video.Title,
+			)
+		}
 	}
 
-	// =========================
-	// Save State
-	// =========================
+	// ========================================================
+	// Save
+	// ========================================================
 
 	if changed {
-		if err := savePending(pending); err != nil {
+		if err := savePending(
+			pending,
+		); err != nil {
+
 			fmt.Printf(
-				"❌ فشل حفظ حالة طابور النشر: %v\n",
+				"❌ SAVE FAILED: %v\n",
 				err,
 			)
 
-			os.Exit(1)
+			return
 		}
 
 		fmt.Println(
-			"💾 Scheduler state saved",
+			"💾 Pending state saved",
 		)
 	}
 
-	// =========================
-	// Report
-	// =========================
+	// ========================================================
+	// Final Report
+	// ========================================================
 
 	fmt.Println(
-		"\n📊 PUBLISHER REPORT",
-	)
-
-	fmt.Printf(
-		"   📦 Processed : %d\n",
-		processed,
-	)
-
-	fmt.Printf(
-		"   ✅ Published : %d\n",
-		published,
-	)
-
-	fmt.Printf(
-		"   ❌ Failed    : %d\n",
-		failed,
-	)
-
-	fmt.Printf(
-		"   ⏳ Waiting   : %d\n",
-		waiting,
+		"\n════════════════════════════════════",
 	)
 
 	fmt.Println(
-		"🏁 Publisher check complete",
+		"🏁 PUBLISHER COMPLETE",
+	)
+
+	fmt.Printf(
+		"✅ Published: %d\n",
+		publishedCount,
+	)
+
+	fmt.Printf(
+		"❌ Failed: %d\n",
+		failedCount,
+	)
+
+	fmt.Printf(
+		"⏳ Waiting: %d\n",
+		waitingCount,
+	)
+
+	fmt.Printf(
+		"⏭️ Skipped: %d\n",
+		skippedCount,
+	)
+
+	fmt.Printf(
+		"📋 Total: %d\n",
+		len(pending),
+	)
+
+	fmt.Printf(
+		"🕐 Finished: %s UTC\n",
+		time.Now().
+			UTC().
+			Format(time.RFC3339),
+	)
+
+	fmt.Println(
+		"════════════════════════════════════",
 	)
 }
 
-// accessToken يستبدل refresh_token بـ access_token
-// باستخدام Google OAuth 2.0.
-func accessToken() (string, error) {
-	clientID := strings.TrimSpace(
-		os.Getenv("YT_CLIENT_ID"),
-	)
+// ============================================================
+// Publish Video
+// ============================================================
 
-	clientSecret := strings.TrimSpace(
-		os.Getenv("YT_CLIENT_SECRET"),
-	)
+func publishVideo(
+	videoID string,
+) error {
 
-	refreshToken := strings.TrimSpace(
-		os.Getenv("YT_REFRESH_TOKEN"),
-	)
-
-	if clientID == "" {
-		return "",
-			errors.New(
-				"YT_CLIENT_ID غير موجود",
-			)
-	}
-
-	if clientSecret == "" {
-		return "",
-			errors.New(
-				"YT_CLIENT_SECRET غير موجود",
-			)
-	}
-
-	if refreshToken == "" {
-		return "",
-			errors.New(
-				"YT_REFRESH_TOKEN غير موجود",
-			)
-	}
-
-	// Google OAuth Token Endpoint
-	// يتطلب application/x-www-form-urlencoded.
-	form := url.Values{}
-
-	form.Set(
-		"client_id",
-		clientID,
-	)
-
-	form.Set(
-		"client_secret",
-		clientSecret,
-	)
-
-	form.Set(
-		"refresh_token",
-		refreshToken,
-	)
-
-	form.Set(
-		"grant_type",
-		"refresh_token",
-	)
-
-	req, err := http.NewRequest(
-		http.MethodPost,
-		tokenURL,
-		strings.NewReader(
-			form.Encode(),
-		),
-	)
-
-	if err != nil {
-		return "",
-			fmt.Errorf(
-				"create OAuth request: %w",
-				err,
-			)
-	}
-
-	req.Header.Set(
-		"Content-Type",
-		"application/x-www-form-urlencoded",
-	)
-
-	resp, err := httpClient.Do(req)
-
-	if err != nil {
-		return "",
-			fmt.Errorf(
-				"OAuth request failed: %w",
-				err,
-			)
-	}
-
-	defer resp.Body.Close()
-
-	responseBody, err := io.ReadAll(
-		io.LimitReader(
-			resp.Body,
-			1024*1024,
-		),
-	)
-
-	if err != nil {
-		return "",
-			fmt.Errorf(
-				"read OAuth response: %w",
-				err,
-			)
-	}
-
-	// يجب التحقق من HTTP status قبل اعتبار الاستجابة ناجحة.
-	if resp.StatusCode < 200 ||
-		resp.StatusCode >= 300 {
-
-		detail := strings.TrimSpace(
-			string(responseBody),
-		)
-
-		if detail == "" {
-			detail = "empty response"
-		}
-
-		return "",
-			fmt.Errorf(
-				"OAuth token exchange failed: HTTP %d: %s",
-				resp.StatusCode,
-				detail,
-			)
-	}
-
-	var out struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-
-	if err := json.Unmarshal(
-		responseBody,
-		&out,
-	); err != nil {
-		return "",
-			fmt.Errorf(
-				"decode OAuth response: %w",
-				err,
-			)
-	}
-
-	if strings.TrimSpace(
-		out.AccessToken,
-	) == "" {
-		return "",
-			errors.New(
-				"Google لم يرجع access_token",
-			)
-	}
-
-	return out.AccessToken, nil
-}
-
-// setPublic يجعل فيديو YouTube عامًا.
-func setPublic(videoID string) error {
 	videoID = strings.TrimSpace(
 		videoID,
 	)
 
 	if videoID == "" {
 		return errors.New(
-			"YouTube video ID فارغ",
+			"empty YouTube video ID",
 		)
 	}
 
-	token, err := accessToken()
+	if err := youtube.SetPublic(
+		videoID,
+	); err != nil {
 
-	if err != nil {
-		return err
-	}
-
-	payload := map[string]interface{}{
-		"id": videoID,
-
-		"status": map[string]interface{}{
-			"privacyStatus": "public",
-		},
-	}
-
-	body, err := json.Marshal(
-		payload,
-	)
-
-	if err != nil {
 		return fmt.Errorf(
-			"encode YouTube request: %w",
+			"set public: %w",
 			err,
-		)
-	}
-
-	req, err := http.NewRequest(
-		http.MethodPut,
-		youtubeVideosURL,
-		bytes.NewReader(body),
-	)
-
-	if err != nil {
-		return fmt.Errorf(
-			"create YouTube request: %w",
-			err,
-		)
-	}
-
-	req.Header.Set(
-		"Authorization",
-		"Bearer "+token,
-	)
-
-	req.Header.Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	resp, err := httpClient.Do(req)
-
-	if err != nil {
-		return fmt.Errorf(
-			"YouTube API request failed: %w",
-			err,
-		)
-	}
-
-	defer resp.Body.Close()
-
-	responseBody, _ := io.ReadAll(
-		io.LimitReader(
-			resp.Body,
-			2*1024*1024,
-		),
-	)
-
-	if resp.StatusCode < 200 ||
-		resp.StatusCode >= 300 {
-
-		detail := strings.TrimSpace(
-			string(responseBody),
-		)
-
-		if detail == "" {
-			detail = "empty response"
-		}
-
-		return fmt.Errorf(
-			"YouTube API HTTP %d: %s",
-			resp.StatusCode,
-			detail,
 		)
 	}
 
 	return nil
 }
 
-// loadPending يقرأ schedule/pending.json.
+// ============================================================
+// Load Pending
+// ============================================================
+
 func loadPending() ([]PendingVideo, error) {
+	fileMu.Lock()
+	defer fileMu.Unlock()
+
 	data, err := os.ReadFile(
 		pendingFile,
 	)
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return []PendingVideo{}, nil
 		}
 
 		return nil,
@@ -523,62 +414,132 @@ func loadPending() ([]PendingVideo, error) {
 			)
 	}
 
-	if len(
-		bytes.TrimSpace(data),
-	) == 0 {
-		return nil, nil
+	if len(strings.TrimSpace(
+		string(data),
+	)) == 0 {
+
+		return []PendingVideo{}, nil
 	}
+
+	// ========================================================
+	// New format
+	// ========================================================
 
 	var st state
 
 	if err := json.Unmarshal(
 		data,
 		&st,
+	); err == nil {
+
+		if st.Videos == nil {
+			st.Videos = []PendingVideo{}
+		}
+
+		return st.Videos, nil
+	}
+
+	// ========================================================
+	// Legacy format
+	//
+	// يدعم أيضًا pending.json القديم:
+	//
+	// [
+	//   {
+	//     "youtube_id": "...",
+	//     ...
+	//   }
+	// ]
+	// ========================================================
+
+	var legacy []PendingVideo
+
+	if err := json.Unmarshal(
+		data,
+		&legacy,
 	); err != nil {
+
 		return nil,
 			fmt.Errorf(
-				"invalid JSON in %s: %w",
-				pendingFile,
+				"invalid pending.json: %w",
 				err,
 			)
 	}
 
-	return st.Videos, nil
+	if legacy == nil {
+		legacy = []PendingVideo{}
+	}
+
+	return legacy, nil
 }
 
-// savePending يحفظ حالة الطابور بطريقة ذرية.
-// نكتب أولًا إلى ملف مؤقت ثم نستبدل الملف الأصلي.
+// ============================================================
+// Save Pending
+// ============================================================
+
 func savePending(
 	videos []PendingVideo,
 ) error {
-	dir := filepath.Dir(
-		pendingFile,
-	)
+
+	fileMu.Lock()
+	defer fileMu.Unlock()
 
 	if err := os.MkdirAll(
-		dir,
+		filepath.Dir(pendingFile),
 		0755,
 	); err != nil {
+
 		return fmt.Errorf(
 			"create schedule directory: %w",
 			err,
 		)
 	}
 
+	// ========================================================
+	// Normalize
+	// ========================================================
+
+	for i := range videos {
+		videos[i].YouTubeID =
+			strings.TrimSpace(
+				videos[i].YouTubeID,
+			)
+
+		if !videos[i].PublishAt.IsZero() {
+			videos[i].PublishAt =
+				videos[i].PublishAt.UTC()
+		}
+	}
+
+	// ========================================================
+	// Encode
+	// ========================================================
+
+	payload := state{
+		Videos: videos,
+	}
+
 	data, err := json.MarshalIndent(
-		state{
-			Videos: videos,
-		},
+		payload,
 		"",
 		"  ",
 	)
 
 	if err != nil {
 		return fmt.Errorf(
-			"encode scheduler state: %w",
+			"encode pending state: %w",
 			err,
 		)
 	}
+
+	data = append(
+		data,
+		'\n',
+	)
+
+	// ========================================================
+	// Atomic write
+	// ========================================================
 
 	tempFile := pendingFile + ".tmp"
 
@@ -587,6 +548,7 @@ func savePending(
 		data,
 		0644,
 	); err != nil {
+
 		return fmt.Errorf(
 			"write temporary state: %w",
 			err,
@@ -597,16 +559,77 @@ func savePending(
 		tempFile,
 		pendingFile,
 	); err != nil {
+
 		_ = os.Remove(
 			tempFile,
 		)
 
 		return fmt.Errorf(
-			"replace scheduler state: %w",
+			"replace pending state: %w",
 			err,
 		)
 	}
 
 	return nil
+}
+
+// ============================================================
+// Publisher Lock
+// ============================================================
+
+func acquireLock() (func(), error) {
+	if err := os.MkdirAll(
+		filepath.Dir(lockFile),
+		0755,
+	); err != nil {
+
+		return nil,
+			fmt.Errorf(
+				"create lock directory: %w",
+				err,
+			)
+	}
+
+	// O_EXCL يجعل إنشاء الملف ذريًا:
+	// إذا كان Publisher آخر يعمل بالفعل فسيفشل.
+	file, err := os.OpenFile(
+		lockFile,
+		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
+		0644,
+	)
+
+	if err != nil {
+		if os.IsExist(err) {
+			return nil,
+				errors.New(
+					"lock file already exists",
+				)
+		}
+
+		return nil,
+			fmt.Errorf(
+				"create publisher lock: %w",
+				err,
+			)
+	}
+
+	_, _ = fmt.Fprintf(
+		file,
+		"pid=%d\nstarted=%s\n",
+		os.Getpid(),
+		time.Now().
+			UTC().
+			Format(time.RFC3339),
+	)
+
+	_ = file.Close()
+
+	unlock := func() {
+		_ = os.Remove(
+			lockFile,
+		)
+	}
+
+	return unlock, nil
 }
 ```
