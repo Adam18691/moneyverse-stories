@@ -1,4 +1,17 @@
 ```go
+// cmd/publisher/publish.go
+//
+// Publisher for Moneyverse Stories.
+// ينشر الفيديوهات التي حان موعد نشرها على YouTube.
+//
+// ملاحظات:
+// - يعتمد على internal/youtube.SetPublic()
+// - يدعم pending.json بصيغة object أو array القديمة
+// - يمنع تشغيل Publisher مرتين في نفس الوقت
+// - يحفظ الحالة بطريقة Atomic Write
+// - يسجل عدد المحاولات الفاشلة
+// - لا يعتبر الفيديو Published إلا بعد نجاح YouTube API
+
 package main
 
 import (
@@ -16,10 +29,9 @@ import (
 
 const (
 	pendingFile = "schedule/pending.json"
+	lockFile    = "schedule/publisher.lock"
 
 	maxAttempts = 3
-
-	lockFile = "schedule/publisher.lock"
 )
 
 var fileMu sync.Mutex
@@ -45,67 +57,40 @@ type state struct {
 // ============================================================
 
 func main() {
-	fmt.Println(
-		"🗓️ MONEYVERSE PUBLISHER",
-	)
-
-	fmt.Println(
-		"════════════════════════════════════",
-	)
-
+	fmt.Println("🗓️ MONEYVERSE PUBLISHER")
+	fmt.Println("════════════════════════════════════")
 	fmt.Printf(
 		"⏰ CHECK: %s\n",
-		time.Now().
-			UTC().
-			Format(time.RFC3339),
+		time.Now().UTC().Format(time.RFC3339),
 	)
+	fmt.Printf("📁 STATE: %s\n", pendingFile)
+	fmt.Printf("🔁 MAX ATTEMPTS: %d\n", maxAttempts)
+	fmt.Println("════════════════════════════════════")
 
-	fmt.Printf(
-		"📁 STATE: %s\n",
-		pendingFile,
-	)
-
-	fmt.Printf(
-		"🔁 MAX ATTEMPTS: %d\n",
-		maxAttempts,
-	)
-
-	fmt.Println(
-		"════════════════════════════════════",
-	)
-
-	// ========================================================
-	// Prevent overlapping publisher processes
-	// ========================================================
+	// --------------------------------------------------------
+	// Prevent duplicate publisher processes
+	// --------------------------------------------------------
 
 	unlock, err := acquireLock()
 	if err != nil {
-		fmt.Printf(
-			"🛑 Publisher already running: %v\n",
-			err,
-		)
+		fmt.Printf("🛑 Publisher already running: %v\n", err)
 		return
 	}
 
 	defer unlock()
 
-	// ========================================================
-	// Load
-	// ========================================================
+	// --------------------------------------------------------
+	// Load queue
+	// --------------------------------------------------------
 
 	pending, err := loadPending()
 	if err != nil {
-		fmt.Printf(
-			"❌ LOAD FAILED: %v\n",
-			err,
-		)
+		fmt.Printf("❌ LOAD FAILED: %v\n", err)
 		return
 	}
 
 	if len(pending) == 0 {
-		fmt.Println(
-			"📭 لا يوجد فيديوهات مجدولة",
-		)
+		fmt.Println("📭 لا توجد فيديوهات مجدولة")
 		return
 	}
 
@@ -114,13 +99,14 @@ func main() {
 		len(pending),
 	)
 
-	// ========================================================
-	// Process
-	// ========================================================
+	// --------------------------------------------------------
+	// Processing
+	// --------------------------------------------------------
 
 	now := time.Now().UTC()
 
 	changed := false
+
 	publishedCount := 0
 	failedCount := 0
 	waitingCount := 0
@@ -129,14 +115,19 @@ func main() {
 	for i := range pending {
 		video := &pending[i]
 
-		// ----------------------------------------------------
-		// Invalid entry
-		// ----------------------------------------------------
+		// ====================================================
+		// Normalize YouTube ID
+		// ====================================================
 
-		if strings.TrimSpace(
+		video.YouTubeID = strings.TrimSpace(
 			video.YouTubeID,
-		) == "" {
+		)
 
+		// ====================================================
+		// Validate ID
+		// ====================================================
+
+		if video.YouTubeID == "" {
 			fmt.Printf(
 				"⚠️ ENTRY %d — missing YouTube ID — skip\n",
 				i+1,
@@ -146,28 +137,27 @@ func main() {
 			continue
 		}
 
-		// ----------------------------------------------------
-		// Already published
-		// ----------------------------------------------------
+		// ====================================================
+		// Already Published
+		// ====================================================
 
 		if video.Published {
-			skippedCount++
-
 			fmt.Printf(
 				"   ✓ %s — already published\n",
 				video.YouTubeID,
 			)
 
+			skippedCount++
 			continue
 		}
 
-		// ----------------------------------------------------
-		// Invalid publish time
-		// ----------------------------------------------------
+		// ====================================================
+		// Validate PublishAt
+		// ====================================================
 
 		if video.PublishAt.IsZero() {
 			fmt.Printf(
-				"   ⚠️ %s — invalid publish time — skip\n",
+				"   ⚠️ %s — publish time missing — skip\n",
 				video.YouTubeID,
 			)
 
@@ -175,46 +165,40 @@ func main() {
 			continue
 		}
 
-		// ----------------------------------------------------
-		// Normalize time to UTC
-		// ----------------------------------------------------
+		// Normalize schedule to UTC.
+		video.PublishAt = video.PublishAt.UTC()
 
-		publishAt := video.PublishAt.UTC()
+		// ====================================================
+		// Waiting
+		// ====================================================
 
-		// ----------------------------------------------------
-		// Not due yet
-		// ----------------------------------------------------
-
-		if now.Before(publishAt) {
+		if now.Before(video.PublishAt) {
 			waitingCount++
 
 			fmt.Printf(
-				"   ⏳ %s — waiting until %s UTC\n",
+				"   ⏳ %s — waiting until %s\n",
 				video.YouTubeID,
-				publishAt.Format(
-					time.RFC3339,
-				),
+				video.PublishAt.Format(time.RFC3339),
 			)
 
 			continue
 		}
 
-		// ----------------------------------------------------
-		// Attempts limit
-		// ----------------------------------------------------
+		// ====================================================
+		// Maximum Attempts
+		// ====================================================
 
 		if video.Attempts >= maxAttempts {
 			fmt.Printf(
-				"   🛑 %s — %d attempts reached — permanently skipped\n",
+				"   🛑 %s — maximum attempts reached (%d/%d)\n",
 				video.YouTubeID,
+				video.Attempts,
 				maxAttempts,
 			)
 
-			// لا نضع Published=true هنا؛
-			// لأن الفيديو لم يُنشر بنجاح.
-			//
-			// إبقاؤه false يسمح بالتعرف عليه كفيديو
-			// فشل نهائيًا بدل اعتباره منشورًا.
+			// مهم:
+			// لا نضع Published=true.
+			// الفيديو فشل فعليًا ويحتاج مراجعة.
 			skippedCount++
 			continue
 		}
@@ -228,7 +212,7 @@ func main() {
 			video.YouTubeID,
 		)
 
-		if video.Title != "" {
+		if strings.TrimSpace(video.Title) != "" {
 			fmt.Printf(
 				" — %s",
 				video.Title,
@@ -237,9 +221,7 @@ func main() {
 
 		fmt.Println()
 
-		err := publishVideo(
-			video.YouTubeID,
-		)
+		err := publishVideo(video.YouTubeID)
 
 		if err != nil {
 			video.Attempts++
@@ -266,20 +248,21 @@ func main() {
 			continue
 		}
 
-		// ----------------------------------------------------
-		// Success
-		// ----------------------------------------------------
+		// ====================================================
+		// Successful Publish
+		// ====================================================
 
 		video.Published = true
-		changed = true
+
 		publishedCount++
+		changed = true
 
 		fmt.Printf(
 			"   ✅ PUBLISHED: https://youtu.be/%s\n",
 			video.YouTubeID,
 		)
 
-		if video.Title != "" {
+		if strings.TrimSpace(video.Title) != "" {
 			fmt.Printf(
 				"      %s\n",
 				video.Title,
@@ -292,34 +275,24 @@ func main() {
 	// ========================================================
 
 	if changed {
-		if err := savePending(
-			pending,
-		); err != nil {
-
+		if err := savePending(pending); err != nil {
 			fmt.Printf(
 				"❌ SAVE FAILED: %v\n",
 				err,
 			)
-
 			return
 		}
 
-		fmt.Println(
-			"💾 Pending state saved",
-		)
+		fmt.Println("💾 Pending state saved")
 	}
 
 	// ========================================================
 	// Final Report
 	// ========================================================
 
-	fmt.Println(
-		"\n════════════════════════════════════",
-	)
-
-	fmt.Println(
-		"🏁 PUBLISHER COMPLETE",
-	)
+	fmt.Println()
+	fmt.Println("════════════════════════════════════")
+	fmt.Println("🏁 PUBLISHER COMPLETE")
 
 	fmt.Printf(
 		"✅ Published: %d\n",
@@ -347,41 +320,27 @@ func main() {
 	)
 
 	fmt.Printf(
-		"🕐 Finished: %s UTC\n",
-		time.Now().
-			UTC().
-			Format(time.RFC3339),
+		"🕐 Finished: %s\n",
+		time.Now().UTC().Format(time.RFC3339),
 	)
 
-	fmt.Println(
-		"════════════════════════════════════",
-	)
+	fmt.Println("════════════════════════════════════")
 }
 
 // ============================================================
 // Publish Video
 // ============================================================
 
-func publishVideo(
-	videoID string,
-) error {
-
-	videoID = strings.TrimSpace(
-		videoID,
-	)
+func publishVideo(videoID string) error {
+	videoID = strings.TrimSpace(videoID)
 
 	if videoID == "" {
-		return errors.New(
-			"empty YouTube video ID",
-		)
+		return errors.New("empty YouTube video ID")
 	}
 
-	if err := youtube.SetPublic(
-		videoID,
-	); err != nil {
-
+	if err := youtube.SetPublic(videoID); err != nil {
 		return fmt.Errorf(
-			"set public: %w",
+			"set video public: %w",
 			err,
 		)
 	}
@@ -397,41 +356,35 @@ func loadPending() ([]PendingVideo, error) {
 	fileMu.Lock()
 	defer fileMu.Unlock()
 
-	data, err := os.ReadFile(
-		pendingFile,
-	)
+	data, err := os.ReadFile(pendingFile)
 
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []PendingVideo{}, nil
 		}
 
-		return nil,
-			fmt.Errorf(
-				"read %s: %w",
-				pendingFile,
-				err,
-			)
+		return nil, fmt.Errorf(
+			"read %s: %w",
+			pendingFile,
+			err,
+		)
 	}
 
-	if len(strings.TrimSpace(
-		string(data),
-	)) == 0 {
-
+	if len(strings.TrimSpace(string(data))) == 0 {
 		return []PendingVideo{}, nil
 	}
 
 	// ========================================================
 	// New format
+	//
+	// {
+	//   "videos": [...]
+	// }
 	// ========================================================
 
 	var st state
 
-	if err := json.Unmarshal(
-		data,
-		&st,
-	); err == nil {
-
+	if err := json.Unmarshal(data, &st); err == nil {
 		if st.Videos == nil {
 			st.Videos = []PendingVideo{}
 		}
@@ -442,28 +395,22 @@ func loadPending() ([]PendingVideo, error) {
 	// ========================================================
 	// Legacy format
 	//
-	// يدعم أيضًا pending.json القديم:
-	//
 	// [
 	//   {
 	//     "youtube_id": "...",
-	//     ...
+	//     "title": "...",
+	//     "publish_at": "..."
 	//   }
 	// ]
 	// ========================================================
 
 	var legacy []PendingVideo
 
-	if err := json.Unmarshal(
-		data,
-		&legacy,
-	); err != nil {
-
-		return nil,
-			fmt.Errorf(
-				"invalid pending.json: %w",
-				err,
-			)
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return nil, fmt.Errorf(
+			"invalid pending.json: %w",
+			err,
+		)
 	}
 
 	if legacy == nil {
@@ -477,18 +424,13 @@ func loadPending() ([]PendingVideo, error) {
 // Save Pending
 // ============================================================
 
-func savePending(
-	videos []PendingVideo,
-) error {
-
+func savePending(videos []PendingVideo) error {
 	fileMu.Lock()
 	defer fileMu.Unlock()
 
-	if err := os.MkdirAll(
-		filepath.Dir(pendingFile),
-		0755,
-	); err != nil {
+	dir := filepath.Dir(pendingFile)
 
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf(
 			"create schedule directory: %w",
 			err,
@@ -496,23 +438,26 @@ func savePending(
 	}
 
 	// ========================================================
-	// Normalize
+	// Normalize state
 	// ========================================================
 
 	for i := range videos {
-		videos[i].YouTubeID =
-			strings.TrimSpace(
-				videos[i].YouTubeID,
-			)
+		videos[i].YouTubeID = strings.TrimSpace(
+			videos[i].YouTubeID,
+		)
 
 		if !videos[i].PublishAt.IsZero() {
 			videos[i].PublishAt =
 				videos[i].PublishAt.UTC()
 		}
+
+		if videos[i].Attempts < 0 {
+			videos[i].Attempts = 0
+		}
 	}
 
 	// ========================================================
-	// Encode
+	// Encode JSON
 	// ========================================================
 
 	payload := state{
@@ -532,13 +477,10 @@ func savePending(
 		)
 	}
 
-	data = append(
-		data,
-		'\n',
-	)
+	data = append(data, '\n')
 
 	// ========================================================
-	// Atomic write
+	// Atomic Write
 	// ========================================================
 
 	tempFile := pendingFile + ".tmp"
@@ -548,7 +490,6 @@ func savePending(
 		data,
 		0644,
 	); err != nil {
-
 		return fmt.Errorf(
 			"write temporary state: %w",
 			err,
@@ -560,9 +501,7 @@ func savePending(
 		pendingFile,
 	); err != nil {
 
-		_ = os.Remove(
-			tempFile,
-		)
+		_ = os.Remove(tempFile)
 
 		return fmt.Errorf(
 			"replace pending state: %w",
@@ -578,20 +517,15 @@ func savePending(
 // ============================================================
 
 func acquireLock() (func(), error) {
-	if err := os.MkdirAll(
-		filepath.Dir(lockFile),
-		0755,
-	); err != nil {
+	dir := filepath.Dir(lockFile)
 
-		return nil,
-			fmt.Errorf(
-				"create lock directory: %w",
-				err,
-			)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf(
+			"create lock directory: %w",
+			err,
+		)
 	}
 
-	// O_EXCL يجعل إنشاء الملف ذريًا:
-	// إذا كان Publisher آخر يعمل بالفعل فسيفشل.
 	file, err := os.OpenFile(
 		lockFile,
 		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
@@ -600,34 +534,53 @@ func acquireLock() (func(), error) {
 
 	if err != nil {
 		if os.IsExist(err) {
-			return nil,
-				errors.New(
-					"lock file already exists",
-				)
+			return nil, errors.New(
+				"publisher lock already exists",
+			)
 		}
 
-		return nil,
-			fmt.Errorf(
-				"create publisher lock: %w",
-				err,
-			)
+		return nil, fmt.Errorf(
+			"create publisher lock: %w",
+			err,
+		)
 	}
 
-	_, _ = fmt.Fprintf(
+	_, writeErr := fmt.Fprintf(
 		file,
 		"pid=%d\nstarted=%s\n",
 		os.Getpid(),
-		time.Now().
-			UTC().
-			Format(time.RFC3339),
+		time.Now().UTC().Format(time.RFC3339),
 	)
 
-	_ = file.Close()
+	closeErr := file.Close()
+
+	if writeErr != nil {
+		_ = os.Remove(lockFile)
+
+		return nil, fmt.Errorf(
+			"write publisher lock: %w",
+			writeErr,
+		)
+	}
+
+	if closeErr != nil {
+		_ = os.Remove(lockFile)
+
+		return nil, fmt.Errorf(
+			"close publisher lock: %w",
+			closeErr,
+		)
+	}
 
 	unlock := func() {
-		_ = os.Remove(
-			lockFile,
-		)
+		if err := os.Remove(lockFile); err != nil &&
+			!os.IsNotExist(err) {
+
+			fmt.Printf(
+				"⚠️ LOCK CLEANUP FAILED: %v\n",
+				err,
+			)
+		}
 	}
 
 	return unlock, nil
